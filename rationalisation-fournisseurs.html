@@ -7,6 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 .page{display:none}.page.active{display:block}
 .badge-CONSERVER{background:#16a34a;color:#fff}
@@ -21,6 +22,7 @@
 thead th{position:sticky;top:0;background:#fff;z-index:10}
 body{font-family:system-ui,sans-serif}
 .svc-tag{font-size:10px;padding:2px 6px;border-radius:9999px;font-weight:600}
+.sb-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -37,10 +39,11 @@ body{font-family:system-ui,sans-serif}
       <a class="nav-link cursor-pointer px-3 py-4 hover:text-blue-600" data-page="suppliers">Fournisseurs</a>
       <a class="nav-link cursor-pointer px-3 py-4 hover:text-blue-600" data-page="admin">⚙ Admin</a>
     </div>
-    <div class="flex gap-2">
+    <div class="flex gap-2 items-center">
+      <span id="sb-status" class="text-xs text-gray-400 hidden flex items-center gap-1"></span>
       <button onclick="App.exportJSON()" class="text-xs text-gray-400 hover:text-blue-600 border border-gray-200 px-2 py-1 rounded">💾 Sauvegarder</button>
       <button onclick="document.getElementById('json-file').click()" class="text-xs text-gray-400 hover:text-blue-600 border border-gray-200 px-2 py-1 rounded">📂 Charger</button>
-      <button onclick="App.logout()" class="text-xs text-gray-400 hover:text-red-500 border border-gray-200 px-2 py-1 rounded">⇠ Déconnexion</button>
+      <button onclick="App.logout()" class="text-xs text-gray-400 hover:text-red-500 border border-gray-200 px-2 py-1 rounded">⇠ Déco.</button>
     </div>
   </div>
 </nav>
@@ -105,7 +108,7 @@ body{font-family:system-ui,sans-serif}
   </div>
   <div class="bg-white rounded-xl shadow p-4 mb-4 flex flex-wrap gap-3 items-end">
     <div><label class="block text-xs text-gray-400 mb-1">Recherche</label>
-      <input id="f-search" type="text" placeholder="Nom ou n° fournisseur..." class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-48" oninput="App.renderList()"></div>
+      <input id="f-search" type="text" placeholder="Nom ou n°..." class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-44" oninput="App.renderList()"></div>
     <div><label class="block text-xs text-gray-400 mb-1">Spécialité</label>
       <select id="f-spec" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm" onchange="App.renderList()"><option value="">Toutes</option></select></div>
     <div><label class="block text-xs text-gray-400 mb-1">Région</label>
@@ -156,13 +159,11 @@ body{font-family:system-ui,sans-serif}
       <button onclick="App.delCurrent()" class="text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 text-xs px-3 py-1.5 rounded-lg">🗑 Supprimer</button>
     </div>
   </div>
-
-  <!-- Infos générales -->
   <div class="bg-white rounded-xl shadow mb-4 p-5">
     <h3 class="font-semibold text-gray-700 mb-3 text-sm">Informations générales</h3>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <div><label class="text-xs text-gray-400 block mb-1">N° fournisseur</label>
-        <input id="form-numero" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="ex : FRS-00123"></div>
+        <input id="form-numero" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="FRS-00123"></div>
       <div><label class="text-xs text-gray-400 block mb-1">Spécialité</label>
         <input id="form-spec" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" readonly></div>
       <div><label class="text-xs text-gray-400 block mb-1">Région</label>
@@ -170,12 +171,11 @@ body{font-family:system-ui,sans-serif}
       <div><label class="text-xs text-gray-400 block mb-1">CA annuel estimé (€)</label>
         <input id="form-ca" type="number" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
       <div class="md:col-span-2"><label class="text-xs text-gray-400 block mb-1">CA réalisé N-1 (€)</label>
-        <input id="form-ca-realise" type="number" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Chiffre d'affaires réel"></div>
+        <input id="form-ca-realise" type="number" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
       <div class="md:col-span-2"><label class="text-xs text-gray-400 block mb-1">Notes</label>
         <input id="form-notes" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
     </div>
   </div>
-
   <div id="form-elim-alert" class="hidden bg-red-50 border border-red-300 rounded-xl p-4 mb-4 text-red-700 text-sm">
     ⚠️ <strong>Critère éliminatoire :</strong> <span id="elim-detail"></span>
   </div>
@@ -188,7 +188,6 @@ body{font-family:system-ui,sans-serif}
     </div>
     <button onclick="App.saveForm()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg font-medium">💾 Enregistrer</button>
   </div>
-
   <div class="bg-white rounded-xl shadow mb-4">
     <div class="px-5 py-4 border-b bg-blue-50 rounded-t-xl flex justify-between items-center">
       <h3 class="font-semibold text-blue-800">Axe 1 — Valeur stratégique</h3>
@@ -203,7 +202,6 @@ body{font-family:system-ui,sans-serif}
     </div>
     <div id="axe2-body" class="divide-y divide-gray-100"></div>
   </div>
-
   <div class="bg-white rounded-xl shadow mb-4 p-5">
     <h3 class="font-semibold text-gray-700 mb-4">Décision</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -248,6 +246,28 @@ body{font-family:system-ui,sans-serif}
     <div class="flex justify-between items-center">
       <h2 class="text-xl font-bold text-gray-800">Administration</h2>
       <button onclick="App.lockAdm()" class="text-xs text-gray-400 border border-gray-200 px-3 py-1 rounded hover:bg-gray-50">Verrouiller</button>
+    </div>
+
+    <!-- SUPABASE -->
+    <div class="bg-white rounded-xl shadow p-5 border-2 border-blue-100">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-lg">🔗</span>
+        <h3 class="font-semibold text-blue-800">Connexion Supabase</h3>
+        <span id="sb-adm-status" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Non connecté</span>
+      </div>
+      <p class="text-xs text-gray-400 mb-4">Permet le partage des données en temps réel entre tous les utilisateurs. À configurer une seule fois par poste.</p>
+      <div class="grid grid-cols-1 gap-3 mb-3">
+        <div><label class="text-xs text-gray-500 block mb-1">URL du projet Supabase</label>
+          <input id="sb-url" type="text" placeholder="https://xxxxxxxx.supabase.co" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"></div>
+        <div><label class="text-xs text-gray-500 block mb-1">Clé anon (publique)</label>
+          <input id="sb-key" type="text" placeholder="eyJhbGciOiJ..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"></div>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="SB.connect()" class="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700">Connecter à Supabase</button>
+        <button onclick="SB.disconnect()" class="border border-gray-300 text-gray-500 text-sm px-4 py-2 rounded-lg hover:bg-gray-50">Déconnecter</button>
+        <button onclick="SB.syncAll()" id="sb-sync-btn" class="hidden border border-blue-300 text-blue-600 text-sm px-4 py-2 rounded-lg hover:bg-blue-50">🔄 Synchroniser</button>
+      </div>
+      <p id="sb-msg" class="text-xs mt-2 hidden"></p>
     </div>
 
     <!-- USERS -->
@@ -379,6 +399,8 @@ const SVC_COLORS = {Juridique:'#7c3aed',Comptabilité:'#0891b2',Opérationnel:'#
 
 const DEF_CFG = {
   adminPassword: 'admin2024',
+  supabaseUrl: '',
+  supabaseKey: '',
   users: [
     {id:'u0', login:'admin', password:'admin2024', nom:'Administrateur', service:'Direction', actif:true}
   ],
@@ -428,6 +450,190 @@ const Store = {
   clear(){['fg_cfg','fg_sup','fg_ses'].forEach(k=>localStorage.removeItem(k))}
 };
 
+// ── SUPABASE ─────────────────────────────────────────────
+const SB = {
+  client: null,
+  channel: null,
+
+  isConnected(){return !!this.client},
+
+  async connect(){
+    const url = document.getElementById('sb-url').value.trim();
+    const key = document.getElementById('sb-key').value.trim();
+    if(!url || !key){App.toast('Renseignez l\'URL et la clé Supabase.','red');return;}
+    try{
+      this.client = supabase.createClient(url, key);
+      // Test connexion
+      const {error} = await this.client.from('suppliers').select('id').limit(1);
+      if(error) throw error;
+      ST.cfg.supabaseUrl = url;
+      ST.cfg.supabaseKey = key;
+      Store.save('fg_cfg', ST.cfg);
+      this.updStatus(true);
+      this.subscribe();
+      await this.loadAll();
+      App.toast('Connecté à Supabase ✓', 'green');
+    }catch(e){
+      this.client = null;
+      this.updStatus(false);
+      App.toast('Erreur : ' + (e.message||'vérifiez URL et clé'), 'red');
+      this.showMsg('❌ ' + (e.message||'Connexion échouée'), 'red');
+    }
+  },
+
+  disconnect(){
+    if(this.channel) this.channel.unsubscribe();
+    this.client = null;
+    this.channel = null;
+    ST.cfg.supabaseUrl = '';
+    ST.cfg.supabaseKey = '';
+    Store.save('fg_cfg', ST.cfg);
+    document.getElementById('sb-url').value = '';
+    document.getElementById('sb-key').value = '';
+    this.updStatus(false);
+    App.toast('Déconnecté de Supabase.', 'red');
+  },
+
+  async initFromConfig(){
+    const url = ST.cfg.supabaseUrl;
+    const key = ST.cfg.supabaseKey;
+    if(!url || !key) return;
+    try{
+      this.client = supabase.createClient(url, key);
+      const {error} = await this.client.from('suppliers').select('id').limit(1);
+      if(error) throw error;
+      this.updStatus(true);
+      this.subscribe();
+      await this.loadAll();
+    }catch(e){
+      this.client = null;
+      this.updStatus(false);
+    }
+  },
+
+  async loadAll(){
+    if(!this.client) return;
+    try{
+      const {data, error} = await this.client.from('suppliers').select('*');
+      if(error) throw error;
+      if(data && data.length > 0){
+        data.forEach(row => {
+          const s = this.fromRow(row);
+          ST.suppliers[s.id] = s;
+        });
+        Store.save('fg_sup', ST.suppliers);
+        if(ST.page === 'suppliers') App.renderList();
+        if(ST.page === 'dashboard') App.renderDB();
+      }
+    }catch(e){console.error('SB loadAll:', e);}
+  },
+
+  async upsert(s){
+    if(!this.client) return;
+    try{
+      const {error} = await this.client.from('suppliers').upsert(this.toRow(s));
+      if(error) throw error;
+    }catch(e){console.error('SB upsert:', e); App.toast('⚠️ Sync Supabase échouée', 'red');}
+  },
+
+  async upsertMany(list){
+    if(!this.client) return;
+    try{
+      const {error} = await this.client.from('suppliers').upsert(list.map(s=>this.toRow(s)));
+      if(error) throw error;
+    }catch(e){console.error('SB upsertMany:', e);}
+  },
+
+  async remove(id){
+    if(!this.client) return;
+    try{
+      const {error} = await this.client.from('suppliers').delete().eq('id', id);
+      if(error) throw error;
+    }catch(e){console.error('SB delete:', e);}
+  },
+
+  async syncAll(){
+    if(!this.client){App.toast('Non connecté à Supabase.','red');return;}
+    App.toast('Synchronisation en cours…','green');
+    await this.upsertMany(Object.values(ST.suppliers));
+    await this.loadAll();
+    App.toast('Synchronisation complète ✓','green');
+  },
+
+  subscribe(){
+    if(!this.client || this.channel) return;
+    this.channel = this.client
+      .channel('suppliers-changes')
+      .on('postgres_changes', {event:'*', schema:'public', table:'suppliers'}, payload => {
+        if(payload.eventType === 'DELETE'){
+          delete ST.suppliers[payload.old.id];
+        } else {
+          const s = this.fromRow(payload.new);
+          ST.suppliers[s.id] = s;
+        }
+        Store.save('fg_sup', ST.suppliers);
+        if(ST.page === 'suppliers') App.renderList();
+        if(ST.page === 'dashboard') App.renderDB();
+      })
+      .subscribe();
+  },
+
+  toRow(s){
+    return {
+      id: s.id, name: s.name, numero: s.numero||'',
+      specialty: s.specialty||'', region: s.region||'',
+      ca_annuel: s.caAnnuel||0, ca_realise: s.caRealise||0,
+      notes: s.notes||'',
+      scores: s.scores||{}, comments: s.comments||{}, expiries: s.expiries||{},
+      manual_decision: s.manualDecision||null,
+      decision_comment: s.decisionComment||'',
+      owner: s.owner||'', deadline: s.deadline||null, actions: s.actions||'',
+      updated_by: s.updatedBy||'', updated_at: s.updatedAt||new Date().toISOString(),
+      created_at: s.createdAt||new Date().toISOString()
+    };
+  },
+
+  fromRow(r){
+    return {
+      id: r.id, name: r.name, numero: r.numero||'',
+      specialty: r.specialty||'', region: r.region||'',
+      caAnnuel: r.ca_annuel||0, caRealise: r.ca_realise||0,
+      notes: r.notes||'',
+      scores: r.scores||{}, comments: r.comments||{}, expiries: r.expiries||{},
+      manualDecision: r.manual_decision||null,
+      decisionComment: r.decision_comment||'',
+      owner: r.owner||'', deadline: r.deadline||'', actions: r.actions||'',
+      updatedBy: r.updated_by||'', updatedAt: r.updated_at||'',
+      createdAt: r.created_at||''
+    };
+  },
+
+  updStatus(ok){
+    const nav = document.getElementById('sb-status');
+    const adm = document.getElementById('sb-adm-status');
+    const btn = document.getElementById('sb-sync-btn');
+    if(nav){
+      nav.innerHTML = ok
+        ? '<span class="sb-dot" style="background:#16a34a"></span>Supabase connecté'
+        : '';
+      nav.classList.toggle('hidden', !ok);
+    }
+    if(adm){
+      adm.textContent = ok ? '✅ Connecté' : 'Non connecté';
+      adm.className = `text-xs px-2 py-0.5 rounded-full ${ok?'bg-green-100 text-green-700':'bg-gray-100 text-gray-500'}`;
+    }
+    if(btn) btn.classList.toggle('hidden', !ok);
+  },
+
+  showMsg(msg, color){
+    const el = document.getElementById('sb-msg');
+    if(!el) return;
+    el.textContent = msg;
+    el.className = `text-xs mt-2 ${color==='red'?'text-red-500':'text-green-600'}`;
+    el.classList.remove('hidden');
+  }
+};
+
 // ── CALCUL ───────────────────────────────────────────────
 const Calc = {
   allKeys(){return[...ST.cfg.criteria.axe1,...ST.cfg.criteria.axe2].map(c=>c.key)},
@@ -464,7 +670,6 @@ const Calc = {
 let decChart=null;
 function uid(){return 'sup_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
-function fmt(n){return n?Number(n).toLocaleString('fr-FR')+'€':'—'}
 
 // ── APP ──────────────────────────────────────────────────
 const App = {
@@ -473,13 +678,13 @@ const App = {
     ST.cfg = Store.load('fg_cfg', JSON.parse(JSON.stringify(DEF_CFG)));
     if(!ST.cfg.users) ST.cfg.users = DEF_CFG.users;
     ST.suppliers = Store.load('fg_sup', {});
+    document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>this.nav(el.dataset.page)));
+    document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.add('hidden')}));
     const ses = Store.load('fg_ses', null);
     if(ses){
       const u = ST.cfg.users?.find(x=>x.id===ses.id&&x.actif);
-      if(u){ST.user=u.nom;ST.service=u.service;ST.userId=u.id;this.nav('dashboard');return;}
+      if(u){ST.user=u.nom;ST.service=u.service;ST.userId=u.id;this.nav('dashboard');SB.initFromConfig();return;}
     }
-    document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>this.nav(el.dataset.page)));
-    document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.add('hidden')}));
   },
 
   // ── AUTH ───────────────────────────────────────────────
@@ -492,9 +697,12 @@ const App = {
     ST.user=u.nom;ST.service=u.service;ST.userId=u.id;
     Store.save('fg_ses',{id:u.id});
     this.nav('dashboard');
+    SB.initFromConfig();
   },
 
   logout(){
+    if(SB.channel){SB.channel.unsubscribe();SB.channel=null;}
+    SB.client=null;
     ST.user=null;ST.service=null;ST.userId=null;
     Store.save('fg_ses',null);
     document.getElementById('l-login').value='';
@@ -503,6 +711,7 @@ const App = {
     document.getElementById('page-login').classList.add('active');
     document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active','border-b-2','border-blue-600','text-blue-600'));
     document.getElementById('nav-badge').classList.add('hidden');
+    const ns=document.getElementById('sb-status');if(ns)ns.classList.add('hidden');
   },
 
   // ── NAV ────────────────────────────────────────────────
@@ -555,7 +764,7 @@ const App = {
         <td class="px-4 py-3 text-gray-400 text-xs">${esc(s.region||'—')}</td>
         <td class="px-4 py-3 text-xs text-gray-500">${s.caRealise?Number(s.caRealise).toLocaleString('fr-FR')+'€':'—'}</td>
         <td class="px-4 py-3"><div class="flex items-center gap-2">
-          <div class="h-1.5 bg-gray-100 rounded-full w-16 flex-shrink-0"><div class="h-full rounded-full ${s._p===100?'bg-green-500':s._p>0?'bg-blue-400':'bg-gray-200'}" style="width:${s._p}%"></div></div>
+          <div class="h-1.5 bg-gray-100 rounded-full w-16"><div class="h-full rounded-full ${s._p===100?'bg-green-500':s._p>0?'bg-blue-400':'bg-gray-200'}" style="width:${s._p}%"></div></div>
           <span class="text-xs text-gray-400">${s._p}%</span></div></td>
         <td class="px-4 py-3 font-semibold ${s._sc.total!=null?'text-blue-700':'text-gray-300'}">${sc}</td>
         <td class="px-4 py-3"><span class="badge-${s._d} text-xs px-2 py-0.5 rounded-full font-medium">${s._d.replace('_',' ')}</span></td>
@@ -612,7 +821,6 @@ const App = {
     const svLbl=Calc.svcLabel(c);
     const col=SVC_COLORS[c.services?.[0]]||'#6b7280';
     const svBadge=`<span class="svc-tag" style="background:${col}20;color:${col}">${esc(svLbl)}</span>`;
-
     if(!editable){
       const scTxt=score!=null
         ?`<span class="inline-block w-7 h-7 rounded-lg text-xs font-bold text-center leading-7 ${score===0?'bg-red-100 text-red-600':score<=2?'bg-orange-100 text-orange-600':score<=3?'bg-yellow-100 text-yellow-700':'bg-green-100 text-green-700'}">${score}</span>`
@@ -621,21 +829,17 @@ const App = {
         <div class="flex items-center justify-between gap-3">
           <div><div class="flex items-center gap-2 flex-wrap">
             <span class="text-sm text-gray-400">${esc(c.label)}</span>
-            ${c.eliminatory?'<span class="text-red-400 text-xs">ÉLIMINATOIRE</span>':''}
-            ${svBadge}</div>
+            ${c.eliminatory?'<span class="text-red-400 text-xs">ÉLIMINATOIRE</span>':''}${svBadge}</div>
             <p class="text-xs text-gray-300">Poids : ${c.weight}%</p></div>
-          <div class="flex items-center gap-2 shrink-0">${scTxt}${comment?`<span class="text-xs text-gray-400 italic max-w-xs truncate">"${esc(comment)}"</span>`:''}</div>
+          <div class="flex items-center gap-2 shrink-0">${scTxt}${comment?`<span class="text-xs text-gray-400 italic">"${esc(comment)}"</span>`:''}</div>
         </div></div>`;
     }
-
     const btns=[0,1,2,3,4,5].map(v=>{
       const wouldElim=c.eliminatory&&v<thr,sel=score===v;
       let cls=sel?(wouldElim?'bg-red-600 text-white border-red-600':v<=2?'bg-orange-500 text-white border-orange-500':v<=3?'bg-yellow-500 text-white border-yellow-500':'bg-green-500 text-white border-green-500')
                :(wouldElim?'bg-red-50 text-red-400 border-red-200 hover:bg-red-100':'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100');
-      const tt=wouldElim?"title=\"⚠️ Déclenche l'élimination\"":'';
-      return `<button onclick="App.setScore('${c.key}',${v})" ${tt} class="w-8 h-8 rounded-lg text-sm font-semibold border transition ${cls}">${v}</button>`;
+      return `<button onclick="App.setScore('${c.key}',${v})" class="w-8 h-8 rounded-lg text-sm font-semibold border transition ${cls}">${v}</button>`;
     }).join('');
-
     return `<div class="px-5 py-4 ${isElim?'bg-red-50':''}">
       <div class="flex items-start justify-between gap-3 mb-2">
         <div class="flex-1"><div class="flex items-center gap-1 flex-wrap mb-0.5">
@@ -689,32 +893,37 @@ const App = {
     s.actions=document.getElementById('form-actions').value;
     s.updatedBy=ST.user;s.updatedAt=new Date().toISOString();
     Store.save('fg_sup',ST.suppliers);
+    SB.upsert(s);
     this.toast('Fiche enregistrée ✓','green');
   },
 
   delS(id){
     const s=ST.suppliers[id];if(!s)return;
-    if(!confirm('⚠️ Supprimer "'+s.name+'" ?\n\nToutes ses données de scoring seront définitivement effacées.'))return;
-    delete ST.suppliers[id];Store.save('fg_sup',ST.suppliers);this.renderList();this.toast('Fournisseur supprimé.','red');
+    if(!confirm('⚠️ Supprimer "'+s.name+'" ?\n\nToutes ses données seront définitivement effacées.'))return;
+    delete ST.suppliers[id];Store.save('fg_sup',ST.suppliers);
+    SB.remove(id);
+    this.renderList();this.toast('Fournisseur supprimé.','red');
   },
 
   delCurrent(){
     const id=ST.suppId,s=ST.suppliers[id];if(!s)return;
-    if(!confirm('⚠️ Supprimer "'+s.name+'" ?\n\nToutes ses données de scoring seront définitivement effacées.'))return;
-    delete ST.suppliers[id];Store.save('fg_sup',ST.suppliers);this.nav('suppliers');this.toast('Fournisseur supprimé.','red');
+    if(!confirm('⚠️ Supprimer "'+s.name+'" ?\n\nToutes ses données seront définitivement effacées.'))return;
+    delete ST.suppliers[id];Store.save('fg_sup',ST.suppliers);
+    SB.remove(id);
+    this.nav('suppliers');this.toast('Fournisseur supprimé.','red');
   },
 
   // ── IMPORT / EXPORT ────────────────────────────────────
   normRow(r){
     const g=(...ks)=>{for(const k of ks){if(r[k]!=null&&r[k]!=='')return String(r[k]).trim()}return ''};
     return{
-      name:    g('Nom','nom','Name','name','RAISON SOCIALE','Raison sociale'),
-      numero:  g('numero','Numéro','numero fournisseur','Numéro fournisseur','N°','n°','id_fournisseur'),
-      specialty:g('spécialité','Spécialité','specialite','specialty','Specialty','SPÉCIALITÉ'),
-      region:  g('région','Région','region','Region','RÉGION','zone','Zone'),
-      caAnnuel:parseFloat(g('ca_annuel','CA annuel','CA','ca')||0)||0,
-      caRealise:parseFloat(g('ca_realise','CA réalisé','ca_realise','chiffre affaires','chiffre_affaires')||0)||0,
-      notes:   g('notes','Notes','remarques'),
+      name:     g('Nom','nom','Name','name','RAISON SOCIALE','Raison sociale'),
+      numero:   g('numero','Numéro','numero fournisseur','Numéro fournisseur','N°','n°','id_fournisseur'),
+      specialty:g('spécialité','Spécialité','specialite','specialty','SPÉCIALITÉ'),
+      region:   g('région','Région','region','Region','RÉGION','zone','Zone'),
+      caAnnuel: parseFloat(g('ca_annuel','CA annuel','CA','ca')||0)||0,
+      caRealise:parseFloat(g('ca_realise','CA réalisé','ca_realise','chiffre affaires')||0)||0,
+      notes:    g('notes','Notes','remarques'),
     };
   },
 
@@ -750,18 +959,20 @@ const App = {
     const newR=new Set();
     rows.forEach(r=>{if(r.region&&!ST.cfg.regions.includes(r.region))newR.add(r.region)});
     if(newR.size){ST.cfg.regions.push(...newR);Store.save('fg_cfg',ST.cfg);}
+    const newList=[];
     rows.forEach(r=>{
       if(!r.name)return;
       const id=uid();
-      ST.suppliers[id]={id,name:r.name,numero:r.numero,specialty:r.specialty,region:r.region,
+      const s={id,name:r.name,numero:r.numero,specialty:r.specialty,region:r.region,
         caAnnuel:r.caAnnuel,caRealise:r.caRealise,notes:r.notes,
         scores:{},comments:{},expiries:{},manualDecision:null,decisionComment:'',owner:'',deadline:'',actions:'',
         createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),updatedBy:ST.user};
-      added++;
+      ST.suppliers[id]=s;newList.push(s);added++;
     });
     Store.save('fg_sup',ST.suppliers);
+    SB.upsertMany(newList);
     this.closeM('modal-import');this.renderList();
-    this.toast(added+' fournisseur(s) importé(s)'+(newR.size?' · '+newR.size+' région(s) ajoutée(s)':'')+ ' ✓','green');
+    this.toast(added+' fournisseur(s) importé(s)'+(newR.size?' · '+newR.size+' région(s)':'')+ ' ✓','green');
   },
 
   showAdd(){
@@ -776,7 +987,7 @@ const App = {
     const n=document.getElementById('add-name').value.trim();
     if(!n){this.toast('Nom obligatoire.','red');return;}
     const id=uid();
-    ST.suppliers[id]={id,name:n,
+    const s={id,name:n,
       numero:document.getElementById('add-num').value.trim(),
       specialty:document.getElementById('add-spec').value.trim(),
       region:document.getElementById('add-reg').value,
@@ -784,7 +995,10 @@ const App = {
       caRealise:parseFloat(document.getElementById('add-car').value)||0,
       notes:'',scores:{},comments:{},expiries:{},manualDecision:null,decisionComment:'',owner:'',deadline:'',actions:'',
       createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),updatedBy:ST.user};
-    Store.save('fg_sup',ST.suppliers);this.closeM('modal-add');this.renderList();this.toast('Fournisseur ajouté ✓','green');
+    ST.suppliers[id]=s;
+    Store.save('fg_sup',ST.suppliers);
+    SB.upsert(s);
+    this.closeM('modal-add');this.renderList();this.toast('Fournisseur ajouté ✓','green');
   },
 
   exportExcel(){
@@ -797,7 +1011,7 @@ const App = {
         'Région':s.region||'','CA annuel estimé':s.caAnnuel||0,'CA réalisé N-1':s.caRealise||0,
         'Complétude %':p,'Score Axe1':sc.s1!=null?+sc.s1.toFixed(2):'','Score Axe2':sc.s2!=null?+sc.s2.toFixed(2):'',
         'Score total':sc.total!=null?+sc.total.toFixed(2):'','Décision':dec,
-        'Responsable':s.owner||'','Échéance':s.deadline||'','Actions':s.actions||'','Commentaire':s.decisionComment||''};
+        'Responsable':s.owner||'','Échéance':s.deadline||'','Actions':s.actions||''};
       allC.forEach(c=>{row['Note - '+c.label]=s.scores?.[c.key]??'';row['Cmnt - '+c.label]=s.comments?.[c.key]||''});
       return row;
     });
@@ -839,15 +1053,18 @@ const App = {
     ].map(x=>`<div class="bg-white rounded-xl shadow p-4 text-center"><div class="text-3xl font-bold ${x.c}">${x.v}</div><div class="text-xs text-gray-400 mt-1">${x.l}</div></div>`).join('');
 
     const mq=[
-      {l:'Valeur forte\n+ Risque faible',d:'CONSERVER',c:'bg-green-100 border-green-300 text-green-800',fn:s=>{const sc=Calc.scores(s);return sc.s1>=30&&sc.s2>=35&&!Calc.elim(s).length&&sc.s1!=null&&sc.s2!=null}},
-      {l:'Valeur forte\n+ Risque moyen',d:'MAINTENIR',c:'bg-yellow-100 border-yellow-300 text-yellow-800',fn:s=>{const sc=Calc.scores(s);return sc.s1>=30&&sc.s2>=20&&sc.s2<35&&!Calc.elim(s).length&&sc.s1!=null&&sc.s2!=null}},
-      {l:'Valeur faible\n+ Risque faible',d:'REGROUPER',c:'bg-blue-100 border-blue-300 text-blue-800',fn:s=>{const sc=Calc.scores(s);return sc.s1<30&&sc.s2>=35&&!Calc.elim(s).length&&sc.s1!=null&&sc.s2!=null}},
-      {l:'Valeur faible\n+ Risque élevé',d:'ELIMINER',c:'bg-red-100 border-red-300 text-red-800',fn:s=>(s.manualDecision||Calc.decision(s))==='ELIMINER'},
+      {l:'Valeur forte\n+ Risque faible',c:'bg-green-100 border-green-300 text-green-800',fn:s=>{const sc=Calc.scores(s);return sc.s1>=30&&sc.s2>=35&&!Calc.elim(s).length&&sc.s1!=null&&sc.s2!=null}},
+      {l:'Valeur forte\n+ Risque moyen',c:'bg-yellow-100 border-yellow-300 text-yellow-800',fn:s=>{const sc=Calc.scores(s);return sc.s1>=30&&sc.s2>=20&&sc.s2<35&&!Calc.elim(s).length&&sc.s1!=null&&sc.s2!=null}},
+      {l:'Valeur faible\n+ Risque faible',c:'bg-blue-100 border-blue-300 text-blue-800',fn:s=>{const sc=Calc.scores(s);return sc.s1<30&&sc.s2>=35&&!Calc.elim(s).length&&sc.s1!=null&&sc.s2!=null}},
+      {l:'Valeur faible\n+ Risque élevé',c:'bg-red-100 border-red-300 text-red-800',fn:s=>(s.manualDecision||Calc.decision(s))==='ELIMINER'},
     ];
-    document.getElementById('matrix-grid').innerHTML=mq.map(q=>`<div class="border-2 ${q.c} rounded-xl p-3 text-center">
-      <div class="text-2xl font-bold mb-1">${list.filter(q.fn).length}</div>
-      <div class="text-xs font-medium">${q.d}</div>
-      <div class="text-xs opacity-60 mt-0.5 whitespace-pre-line leading-tight">${q.l}</div></div>`).join('');
+    document.getElementById('matrix-grid').innerHTML=mq.map((q,i)=>{
+      const labels=['CONSERVER','MAINTENIR','REGROUPER','ELIMINER'];
+      return `<div class="border-2 ${q.c} rounded-xl p-3 text-center">
+        <div class="text-2xl font-bold mb-1">${list.filter(q.fn).length}</div>
+        <div class="text-xs font-medium">${labels[i]}</div>
+        <div class="text-xs opacity-60 mt-0.5 whitespace-pre-line leading-tight">${q.l}</div></div>`;
+    }).join('');
 
     if(decChart)decChart.destroy();
     const ctx=document.getElementById('dec-chart').getContext('2d');
@@ -888,7 +1105,12 @@ const App = {
     document.getElementById('admin-gate').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
 
-    // Users list
+    // Supabase fields
+    document.getElementById('sb-url').value = ST.cfg.supabaseUrl||'';
+    document.getElementById('sb-key').value = ST.cfg.supabaseKey||'';
+    SB.updStatus(SB.isConnected());
+
+    // Users
     this.renderUsersList();
 
     // Weights
@@ -917,7 +1139,6 @@ const App = {
             <select onchange="App.updThr('${c.key}',this.value)" class="border border-gray-200 rounded px-2 py-0.5 text-xs bg-white">
               ${[1,2,3,4,5].map(v=>`<option value="${v}" ${thr==v?'selected':''}>${v}${v===1?' (note 0 seul.)':v===3?' (< moyenne)':''}</option>`).join('')}
             </select>
-            <span class="text-xs text-gray-400" id="et-info-${c.key}">→ note &lt; ${thr}</span>
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
@@ -929,23 +1150,21 @@ const App = {
             <input type="checkbox" data-cr="${c.key}" data-sv="${sv}" ${svcs.includes(sv)?'checked':''} ${tousChk?'disabled':''} onchange="App.updSvc('${c.key}',this)">
             ${sv}</label>`).join('')}
         </div>
-        <textarea class="w-full text-xs border border-gray-100 rounded px-2 py-1 text-gray-400 bg-gray-50 mt-2" rows="2" onchange="App.updMod('${c.key}',this.value)">${esc(c.modalities)}</textarea>
       </div>`;
     }).join('');
 
     this.renderRegs();
   },
 
-  // Users management
   renderUsersList(){
     const users=ST.cfg.users||[];
-    document.getElementById('users-list').innerHTML=users.map((u,i)=>`
+    document.getElementById('users-list').innerHTML=users.map(u=>`
       <div class="flex items-center gap-3 border border-gray-100 rounded-lg px-3 py-2">
         <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span class="text-sm font-medium text-gray-700">${esc(u.nom)}</span>
             <span class="text-xs text-gray-400 font-mono">${esc(u.login)}</span>
-            <span class="svc-tag text-xs" style="background:${SVC_COLORS[u.service]||'#6b7280'}20;color:${SVC_COLORS[u.service]||'#6b7280'}">${esc(u.service)}</span>
+            <span class="svc-tag" style="background:${SVC_COLORS[u.service]||'#6b7280'}20;color:${SVC_COLORS[u.service]||'#6b7280'}">${esc(u.service)}</span>
           </div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -977,7 +1196,7 @@ const App = {
     const u=ST.cfg.users?.find(x=>x.id===id);if(!u)return;
     if(id==='u0'&&!actif){this.toast("Impossible de désactiver le compte admin.","red");this.renderUsersList();return;}
     u.actif=actif;Store.save('fg_cfg',ST.cfg);this.renderUsersList();
-    this.toast(actif?'Compte activé ✓':'Compte désactivé.', actif?'green':'red');
+    this.toast(actif?'Compte activé ✓':'Compte désactivé.',actif?'green':'red');
   },
 
   resetUserPw(id){
@@ -993,7 +1212,6 @@ const App = {
     Store.save('fg_cfg',ST.cfg);this.renderUsersList();this.toast('Utilisateur supprimé.','red');
   },
 
-  // Weights / criteria / regions
   updWT(axe){
     let t=0;document.querySelectorAll('.w-inp-'+axe).forEach(i=>t+=parseFloat(i.value)||0);
     const el=document.getElementById('t-'+axe);el.textContent=t+'%';el.className=`font-medium ${Math.round(t)===100?'text-green-600':'text-red-500'}`;
@@ -1015,7 +1233,6 @@ const App = {
 
   findC(k){return[...ST.cfg.criteria.axe1,...ST.cfg.criteria.axe2].find(x=>x.key===k)},
   updLbl(k,v){const c=this.findC(k);if(c)c.label=v;Store.save('fg_cfg',ST.cfg)},
-  updMod(k,v){const c=this.findC(k);if(c)c.modalities=v;Store.save('fg_cfg',ST.cfg)},
 
   updElim(k,chk){
     const c=this.findC(k);if(!c)return;c.eliminatory=chk;
@@ -1026,7 +1243,6 @@ const App = {
 
   updThr(k,v){
     const c=this.findC(k);if(!c)return;c.eliminatoryThreshold=parseInt(v);
-    const info=document.getElementById('et-info-'+k);if(info)info.textContent='→ note < '+v;
     Store.save('fg_cfg',ST.cfg);
   },
 
@@ -1068,7 +1284,7 @@ const App = {
   toast(msg,color='green'){
     const t=document.getElementById('toast'),m=document.getElementById('toast-msg');
     m.textContent=msg;m.className='px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white '+(color==='green'?'bg-green-600':'bg-red-500');
-    t.classList.remove('hidden');setTimeout(()=>t.classList.add('hidden'),2800);
+    t.classList.remove('hidden');setTimeout(()=>t.classList.add('hidden'),3000);
   }
 };
 
