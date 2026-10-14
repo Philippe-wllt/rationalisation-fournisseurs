@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rationalisation Fournisseurs</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+.page{display:none}.page.active{display:block}
+.badge-CONSERVER{background:#16a34a;color:#fff}
+.badge-MAINTENIR{background:#d97706;color:#fff}
+.badge-REGROUPER{background:#2563eb;color:#fff}
+.badge-ELIMINER{background:#dc2626;color:#fff}
+.badge-EN_COURS{background:#6b7280;color:#fff}
+.badge-INCOMPLET{background:#e5e7eb;color:#374151}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:center;justify-content:center}
+.tooltip{position:relative}.tooltip:hover .tt{display:block}
+.tt{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:6px 10px;border-radius:6px;font-size:11px;z-index:100;width:280px;white-space:normal}
+thead th{position:sticky;top:0;background:#fff;z-index:10}
+body{font-family:system-ui,sans-serif}
+.svc-tag{font-size:10px;padding:2px 6px;border-radius:9999px;font-weight:600}
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- NAV -->
+<nav class="bg-white shadow-sm border-b sticky top-0 z-40">
+  <div class="max-w-screen-xl mx-auto px-4 flex items-center justify-between h-14">
+    <div class="flex items-center gap-3">
+      <span class="text-blue-700 font-bold text-lg">⚙ Fournisseurs</span>
+      <span id="nav-badge" class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full hidden"></span>
+    </div>
+    <div class="flex gap-1 text-sm font-medium text-gray-600">
+      <a class="nav-link cursor-pointer px-3 py-4 hover:text-blue-600" data-page="dashboard">Tableau de bord</a>
+      <a class="nav-link cursor-pointer px-3 py-4 hover:text-blue-600" data-page="suppliers">Fournisseurs</a>
+      <a class="nav-link cursor-pointer px-3 py-4 hover:text-blue-600" data-page="admin">⚙ Admin</a>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="App.exportJSON()" class="text-xs text-gray-400 hover:text-blue-600 border border-gray-200 px-2 py-1 rounded">💾 Sauvegarder</button>
+      <button onclick="document.getElementById('json-file').click()" class="text-xs text-gray-400 hover:text-blue-600 border border-gray-200 px-2 py-1 rounded">📂 Charger</button>
+      <button onclick="App.logout()" class="text-xs text-gray-400 hover:text-red-500 border border-gray-200 px-2 py-1 rounded">⇠ Déconnexion</button>
+    </div>
+  </div>
+</nav>
+
+<!-- LOGIN -->
+<div id="page-login" class="page active max-w-sm mx-auto mt-20 px-4">
+  <div class="bg-white rounded-xl shadow p-8 text-center">
+    <div class="text-5xl mb-4">⚙</div>
+    <h1 class="text-xl font-bold text-gray-800 mb-1">Rationalisation fournisseurs</h1>
+    <p class="text-gray-400 text-sm mb-6">Carré Gestion</p>
+    <div class="text-left space-y-3 mb-5">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Identifiant</label>
+        <input id="l-login" type="text" placeholder="Votre identifiant" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" onkeydown="if(event.key==='Enter')App.login()">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Mot de passe</label>
+        <input id="l-pw" type="password" placeholder="Mot de passe" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" onkeydown="if(event.key==='Enter')App.login()">
+      </div>
+    </div>
+    <p id="l-err" class="text-red-500 text-xs mb-3 hidden">Identifiants incorrects ou compte inactif.</p>
+    <button onclick="App.login()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg text-sm">Se connecter →</button>
+    <p class="text-xs text-gray-300 mt-4">Compte par défaut : admin / admin2024</p>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="page-dashboard" class="page max-w-screen-xl mx-auto px-4 py-6">
+  <h2 class="text-xl font-bold text-gray-800 mb-5">Tableau de bord</h2>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="db-stats"></div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-gray-500 mb-4 text-xs uppercase tracking-wide">Matrice de décision</h3>
+      <div id="matrix-grid" class="grid grid-cols-2 gap-2"></div>
+    </div>
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-gray-500 mb-3 text-xs uppercase tracking-wide">Répartition des décisions</h3>
+      <div class="relative h-52"><canvas id="dec-chart"></canvas></div>
+    </div>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-gray-500 mb-3 text-xs uppercase tracking-wide">Avancement par spécialité</h3>
+      <div id="sp-prog" class="space-y-2 text-sm"></div>
+    </div>
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-gray-500 mb-3 text-xs uppercase tracking-wide">À traiter en priorité</h3>
+      <div id="prio-list" class="space-y-1 text-sm"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SUPPLIERS LIST -->
+<div id="page-suppliers" class="page max-w-screen-xl mx-auto px-4 py-6">
+  <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+    <h2 class="text-xl font-bold text-gray-800">Fournisseurs</h2>
+    <div class="flex gap-2 flex-wrap">
+      <button onclick="App.showImport()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1.5 rounded-lg">📥 Importer</button>
+      <button onclick="App.exportExcel()" class="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1.5 rounded-lg">📊 Excel</button>
+      <button onclick="App.showAdd()" class="border border-gray-300 text-gray-700 text-sm px-3 py-1.5 rounded-lg hover:bg-gray-50">+ Ajouter</button>
+    </div>
+  </div>
+  <div class="bg-white rounded-xl shadow p-4 mb-4 flex flex-wrap gap-3 items-end">
+    <div><label class="block text-xs text-gray-400 mb-1">Recherche</label>
+      <input id="f-search" type="text" placeholder="Nom ou n° fournisseur..." class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-48" oninput="App.renderList()"></div>
+    <div><label class="block text-xs text-gray-400 mb-1">Spécialité</label>
+      <select id="f-spec" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm" onchange="App.renderList()"><option value="">Toutes</option></select></div>
+    <div><label class="block text-xs text-gray-400 mb-1">Région</label>
+      <select id="f-reg" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm" onchange="App.renderList()"><option value="">Toutes</option></select></div>
+    <div><label class="block text-xs text-gray-400 mb-1">Décision</label>
+      <select id="f-dec" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm" onchange="App.renderList()">
+        <option value="">Toutes</option><option>CONSERVER</option><option>MAINTENIR</option>
+        <option>REGROUPER</option><option>ELIMINER</option><option>EN_COURS</option><option>INCOMPLET</option>
+      </select></div>
+    <button onclick="App.clearF()" class="text-xs text-gray-400 hover:text-gray-700 underline">Effacer</button>
+    <span id="f-count" class="text-xs text-gray-400 ml-auto self-center"></span>
+  </div>
+  <div class="bg-white rounded-xl shadow overflow-hidden">
+    <div class="overflow-x-auto max-h-[60vh] overflow-y-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-xs text-gray-400 uppercase border-b">
+          <th class="px-4 py-3">N°</th>
+          <th class="px-4 py-3">Fournisseur</th>
+          <th class="px-4 py-3">Spécialité</th>
+          <th class="px-4 py-3">Région</th>
+          <th class="px-4 py-3">CA réalisé</th>
+          <th class="px-4 py-3">Complétude</th>
+          <th class="px-4 py-3">Score</th>
+          <th class="px-4 py-3">Décision</th>
+          <th class="px-4 py-3">Élim.</th>
+          <th class="px-4 py-3"></th>
+        </tr></thead>
+        <tbody id="list-body"><tr><td colspan="10" class="text-center py-10 text-gray-400">Aucun fournisseur.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SUPPLIER FORM -->
+<div id="page-supplier-form" class="page max-w-4xl mx-auto px-4 py-6">
+  <div class="flex items-center gap-3 mb-5 flex-wrap">
+    <button onclick="App.nav('suppliers')" class="text-gray-400 hover:text-blue-600 text-2xl">←</button>
+    <div class="flex-1 min-w-0">
+      <h2 id="form-name" class="text-xl font-bold text-gray-800"></h2>
+      <p id="form-meta" class="text-sm text-gray-400"></p>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="text-right">
+        <div class="text-2xl font-bold text-blue-700" id="form-total">—</div>
+        <div class="text-xs text-gray-400">Score /100</div>
+      </div>
+      <div id="form-dec-badge" class="px-3 py-1 rounded-full text-sm font-semibold"></div>
+      <button onclick="App.delCurrent()" class="text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 text-xs px-3 py-1.5 rounded-lg">🗑 Supprimer</button>
+    </div>
+  </div>
+
+  <!-- Infos générales -->
+  <div class="bg-white rounded-xl shadow mb-4 p-5">
+    <h3 class="font-semibold text-gray-700 mb-3 text-sm">Informations générales</h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div><label class="text-xs text-gray-400 block mb-1">N° fournisseur</label>
+        <input id="form-numero" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="ex : FRS-00123"></div>
+      <div><label class="text-xs text-gray-400 block mb-1">Spécialité</label>
+        <input id="form-spec" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" readonly></div>
+      <div><label class="text-xs text-gray-400 block mb-1">Région</label>
+        <input id="form-region" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" readonly></div>
+      <div><label class="text-xs text-gray-400 block mb-1">CA annuel estimé (€)</label>
+        <input id="form-ca" type="number" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+      <div class="md:col-span-2"><label class="text-xs text-gray-400 block mb-1">CA réalisé N-1 (€)</label>
+        <input id="form-ca-realise" type="number" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Chiffre d'affaires réel"></div>
+      <div class="md:col-span-2"><label class="text-xs text-gray-400 block mb-1">Notes</label>
+        <input id="form-notes" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+    </div>
+  </div>
+
+  <div id="form-elim-alert" class="hidden bg-red-50 border border-red-300 rounded-xl p-4 mb-4 text-red-700 text-sm">
+    ⚠️ <strong>Critère éliminatoire :</strong> <span id="elim-detail"></span>
+  </div>
+  <div class="bg-white rounded-xl shadow p-4 mb-4 flex items-center gap-4">
+    <div class="flex-1">
+      <div class="flex justify-between text-xs text-gray-400 mb-1"><span>Complétude</span><span id="form-pct">0%</span></div>
+      <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div id="form-bar" class="h-full bg-blue-500 transition-all" style="width:0%"></div>
+      </div>
+    </div>
+    <button onclick="App.saveForm()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg font-medium">💾 Enregistrer</button>
+  </div>
+
+  <div class="bg-white rounded-xl shadow mb-4">
+    <div class="px-5 py-4 border-b bg-blue-50 rounded-t-xl flex justify-between items-center">
+      <h3 class="font-semibold text-blue-800">Axe 1 — Valeur stratégique</h3>
+      <span class="text-blue-700 font-bold" id="axe1-sc">—/50</span>
+    </div>
+    <div id="axe1-body" class="divide-y divide-gray-100"></div>
+  </div>
+  <div class="bg-white rounded-xl shadow mb-4">
+    <div class="px-5 py-4 border-b bg-amber-50 rounded-t-xl flex justify-between items-center">
+      <h3 class="font-semibold text-amber-800">Axe 2 — Conformité &amp; Risque</h3>
+      <span class="text-amber-700 font-bold" id="axe2-sc">—/50</span>
+    </div>
+    <div id="axe2-body" class="divide-y divide-gray-100"></div>
+  </div>
+
+  <div class="bg-white rounded-xl shadow mb-4 p-5">
+    <h3 class="font-semibold text-gray-700 mb-4">Décision</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div><label class="text-xs text-gray-400 block mb-1">Proposition automatique</label>
+        <div id="form-auto-dec" class="text-sm py-2">—</div></div>
+      <div><label class="text-xs text-gray-400 block mb-1">Décision validée</label>
+        <select id="form-man-dec" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" onchange="App.updScores()">
+          <option value="">— Valider la proposition —</option>
+          <option>CONSERVER</option><option>MAINTENIR</option><option>REGROUPER</option><option>ELIMINER</option>
+        </select></div>
+      <div class="md:col-span-2"><label class="text-xs text-gray-400 block mb-1">Commentaire</label>
+        <textarea id="form-dec-cmt" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea></div>
+    </div>
+  </div>
+  <div class="bg-white rounded-xl shadow mb-6 p-5">
+    <h3 class="font-semibold text-gray-700 mb-3">Actions &amp; échéances</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div><label class="text-xs text-gray-400 block mb-1">Responsable</label>
+        <input id="form-owner" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+      <div><label class="text-xs text-gray-400 block mb-1">Échéance</label>
+        <input id="form-deadline" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+      <div class="md:col-span-2"><label class="text-xs text-gray-400 block mb-1">Actions prévues</label>
+        <textarea id="form-actions" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea></div>
+    </div>
+  </div>
+  <div class="flex gap-3 justify-end">
+    <button onclick="App.nav('suppliers')" class="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg">Annuler</button>
+    <button onclick="App.saveForm()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-6 py-2 rounded-lg font-medium">💾 Enregistrer</button>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div id="page-admin" class="page max-w-3xl mx-auto px-4 py-6">
+  <div id="admin-gate" class="bg-white rounded-xl shadow p-8 max-w-sm mx-auto mt-10 text-center">
+    <div class="text-4xl mb-3">🔐</div>
+    <h2 class="text-lg font-bold text-gray-800 mb-4">Administration</h2>
+    <input id="adm-pw" type="password" placeholder="Mot de passe admin" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3" onkeydown="if(event.key==='Enter')App.chkPw()">
+    <button onclick="App.chkPw()" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700">Entrer</button>
+    <p id="pw-err" class="text-red-500 text-xs mt-2 hidden">Mot de passe incorrect</p>
+  </div>
+  <div id="admin-panel" class="hidden space-y-5">
+    <div class="flex justify-between items-center">
+      <h2 class="text-xl font-bold text-gray-800">Administration</h2>
+      <button onclick="App.lockAdm()" class="text-xs text-gray-400 border border-gray-200 px-3 py-1 rounded hover:bg-gray-50">Verrouiller</button>
+    </div>
+
+    <!-- USERS -->
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-gray-700 mb-1">Gestion des utilisateurs</h3>
+      <p class="text-xs text-gray-400 mb-4">Chaque utilisateur se connecte avec son identifiant et mot de passe. Son service détermine les critères qu'il peut renseigner.</p>
+      <div id="users-list" class="mb-4 space-y-2"></div>
+      <div class="border border-dashed border-gray-200 rounded-xl p-4">
+        <p class="text-xs font-semibold text-gray-600 mb-3">Ajouter un utilisateur</p>
+        <div class="grid grid-cols-2 gap-2 mb-2">
+          <div><label class="text-xs text-gray-400 block mb-1">Nom complet</label>
+            <input id="nu-nom" type="text" placeholder="Marie Dupont" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"></div>
+          <div><label class="text-xs text-gray-400 block mb-1">Identifiant</label>
+            <input id="nu-login" type="text" placeholder="mdupont" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"></div>
+          <div><label class="text-xs text-gray-400 block mb-1">Mot de passe</label>
+            <input id="nu-pw" type="password" placeholder="••••••" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"></div>
+          <div><label class="text-xs text-gray-400 block mb-1">Service</label>
+            <select id="nu-svc" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+              <option>Juridique</option><option>Comptabilité</option>
+              <option>Opérationnel</option><option>Achats</option><option>Direction</option>
+            </select></div>
+        </div>
+        <button onclick="App.addUser()" class="bg-blue-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-blue-700">Ajouter</button>
+      </div>
+    </div>
+
+    <!-- WEIGHTS -->
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-gray-700 mb-1">Pondérations</h3>
+      <p class="text-xs text-gray-400 mb-4">La somme de chaque axe doit être égale à 100%.</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div><p class="text-sm font-medium text-blue-700 mb-2">Axe 1</p><div id="w-axe1" class="space-y-2"></div>
+          <div class="flex justify-between mt-2 text-xs text-gray-400 font-medium">Total <span id="t-axe1" class="text-blue-700">0%</span></div></div>
+        <div><p class="text-sm font-medium text-amber-700 mb-2">Axe 2</p><div id="w-axe2" class="space-y-2"></div>
+          <div class="flex justify-between mt-2 text-xs text-gray-400 font-medium">Total <span id="t-axe2" class="text-amber-700">0%</span></div></div>
+      </div>
+      <button onclick="App.saveW()" class="mt-4 bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700">Sauvegarder</button>
+    </div>
+
+    <!-- CRITERIA -->
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-gray-700 mb-1">Critères</h3>
+      <p class="text-xs text-gray-400 mb-4">Libellés, caractère éliminatoire, seuil et services affectés.</p>
+      <div id="adm-criteria" class="space-y-3"></div>
+    </div>
+
+    <!-- REGIONS -->
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-gray-700 mb-3">Régions</h3>
+      <div id="adm-regions" class="flex flex-wrap gap-2 mb-3"></div>
+      <div class="flex gap-2">
+        <input id="new-reg" type="text" placeholder="Nouvelle région..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <button onclick="App.addReg()" class="bg-gray-800 text-white text-sm px-3 py-2 rounded-lg">Ajouter</button>
+      </div>
+    </div>
+
+    <!-- CHANGE PW -->
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-gray-700 mb-3">Mot de passe administrateur</h3>
+      <div class="flex gap-2">
+        <input id="new-pw" type="password" placeholder="Nouveau mot de passe admin" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <button onclick="App.chgPw()" class="bg-gray-800 text-white text-sm px-4 py-2 rounded-lg">Modifier</button>
+      </div>
+    </div>
+
+    <!-- DANGER -->
+    <div class="bg-white rounded-xl shadow p-5 border border-red-100">
+      <h3 class="font-semibold text-red-600 mb-3">Zone dangereuse</h3>
+      <button onclick="App.resetAll()" class="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2 rounded-lg hover:bg-red-100">🗑 Réinitialiser toutes les données</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IMPORT -->
+<div id="modal-import" class="modal-overlay hidden">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+    <h3 class="font-bold text-gray-800 mb-1">Importer des fournisseurs</h3>
+    <p class="text-sm text-gray-400 mb-4">Colonnes : <strong>nom</strong>, <strong>numero</strong>, <strong>spécialité</strong>, <strong>région</strong>. Options : <em>ca_annuel</em>, <em>ca_realise</em>, <em>notes</em>.</p>
+    <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 mb-4" onclick="document.getElementById('imp-file').click()">
+      <p class="text-gray-400 text-sm">Cliquez pour choisir un fichier CSV ou Excel</p>
+    </div>
+    <input id="imp-file" type="file" accept=".csv,.xlsx,.xls" class="hidden" onchange="App.readImpFile(event)">
+    <div id="imp-prev" class="hidden mb-4">
+      <p id="imp-prev-txt" class="text-sm text-gray-600 mb-2"></p>
+      <div id="imp-prev-tbl" class="bg-gray-50 rounded-lg p-2 text-xs text-gray-600 max-h-32 overflow-y-auto"></div>
+    </div>
+    <div class="flex gap-2 justify-end">
+      <button onclick="App.closeM('modal-import')" class="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg">Annuler</button>
+      <button id="imp-ok" onclick="App.doImport()" class="hidden bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700">Importer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ADD -->
+<div id="modal-add" class="modal-overlay hidden">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+    <h3 class="font-bold text-gray-800 mb-4">Ajouter un fournisseur</h3>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="text-xs text-gray-400 block mb-1">Raison sociale *</label>
+        <input id="add-name" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+      <div><label class="text-xs text-gray-400 block mb-1">N° fournisseur</label>
+        <input id="add-num" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="FRS-00001"></div>
+      <div><label class="text-xs text-gray-400 block mb-1">Spécialité *</label>
+        <input id="add-spec" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" list="spec-dl">
+        <datalist id="spec-dl"></datalist></div>
+      <div><label class="text-xs text-gray-400 block mb-1">Région *</label>
+        <select id="add-reg" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select></div>
+      <div><label class="text-xs text-gray-400 block mb-1">CA annuel estimé (€)</label>
+        <input id="add-ca" type="number" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0"></div>
+      <div><label class="text-xs text-gray-400 block mb-1">CA réalisé N-1 (€)</label>
+        <input id="add-car" type="number" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0"></div>
+    </div>
+    <div class="flex gap-2 justify-end mt-4">
+      <button onclick="App.closeM('modal-add')" class="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg">Annuler</button>
+      <button onclick="App.doAdd()" class="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="fixed bottom-5 right-5 hidden z-50">
+  <div id="toast-msg" class="px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white"></div>
+</div>
+<input id="json-file" type="file" accept=".json" class="hidden" onchange="App.loadJSON(event)">
+
+<script>
+// ── CONSTANTES ───────────────────────────────────────────
+const ALL_SVC = ['Juridique','Comptabilité','Opérationnel','Achats','Direction'];
+const SVC_COLORS = {Juridique:'#7c3aed',Comptabilité:'#0891b2',Opérationnel:'#059669',Achats:'#d97706',Direction:'#1d4ed8'};
+
+const DEF_CFG = {
+  adminPassword: 'admin2024',
+  users: [
+    {id:'u0', login:'admin', password:'admin2024', nom:'Administrateur', service:'Direction', actif:true}
+  ],
+  regions: ['Île-de-France','Normandie','Hauts-de-France','Grand Est','Bourgogne-Franche-Comté',
+    'Bretagne','Pays de la Loire','Centre-Val de Loire','Nouvelle-Aquitaine',
+    'Occitanie','Auvergne-Rhône-Alpes','PACA','Corse','National'],
+  criteria: {
+    axe1:[
+      {key:'volume',     label:'Volume achats (CA annuel)',          weight:20, eliminatory:false, eliminatoryThreshold:1, services:['Comptabilité','Achats'],
+       modalities:'5:>100K€/an | 4:50-100K€ | 3:20-50K€ | 2:5-20K€ | 1:<5K€ | 0:inactif'},
+      {key:'substitution',label:'Couverture du besoin',              weight:20, eliminatory:false, eliminatoryThreshold:1, services:['Opérationnel','Achats'],
+       modalities:'5:monopole/très rare | 3:substitution possible | 1:commodité remplaçable'},
+      {key:'quality',    label:'Performance qualité / satisfaction', weight:20, eliminatory:false, eliminatoryThreshold:1, services:['Opérationnel'],
+       modalities:'5:0 litige/conformité>99% | 3:écarts mineurs | 1:litiges récurrents'},
+      {key:'delays',     label:'Respect des délais',                 weight:15, eliminatory:false, eliminatoryThreshold:1, services:['Opérationnel'],
+       modalities:'5:>97% | 4:93-97% | 3:88-93% | 2:80-88% | 1:<80%'},
+      {key:'pricing',    label:'Compétitivité tarifaire',            weight:15, eliminatory:false, eliminatoryThreshold:1, services:['Achats'],
+       modalities:'5:prix marché -10% | 3:dans la norme | 1:prix >15% marché'},
+      {key:'innovation', label:'Valeur ajoutée / Innovation',        weight:10, eliminatory:false, eliminatoryThreshold:1, services:['Tous'],
+       modalities:'5:partenaire innovant | 3:bon partenaire | 1:aucune VA spécifique'},
+    ],
+    axe2:[
+      {key:'social',    label:'Conformité sociale (URSSAF)', weight:25, eliminatory:true, eliminatoryThreshold:1, hasExpiry:true, services:['Juridique'],
+       modalities:'5:attestations valides à jour | 0:absentes ou invalides ⚠️ ÉLIMINATOIRE'},
+      {key:'fiscal',    label:'Conformité fiscale (DGFiP)',  weight:25, eliminatory:true, eliminatoryThreshold:1, hasExpiry:true, services:['Comptabilité','Juridique'],
+       modalities:'5:certificat DGFiP valide | 0:absent ou procédure collective ⚠️ ÉLIMINATOIRE'},
+      {key:'financial', label:'Solidité financière',        weight:20, eliminatory:false, eliminatoryThreshold:1, services:['Comptabilité'],
+       modalities:'5:score BdF A | 3:B-C | 1:D-E | 0:procédure collective'},
+      {key:'insurance', label:'Couverture assurance (RC Pro)',weight:15,eliminatory:true, eliminatoryThreshold:1, hasExpiry:true, services:['Juridique'],
+       modalities:'5:RC Pro adéquate et valide | 0:aucune assurance ⚠️ ÉLIMINATOIRE'},
+      {key:'dependency',label:'Dépendance réciproque',      weight:10, eliminatory:false, eliminatoryThreshold:1, services:['Achats','Comptabilité'],
+       modalities:'5:<5% de son CA | 3:5-20% | 1:>20% (risque de rupture)'},
+      {key:'rse',       label:'Conformité RSE / Éthique',   weight:5,  eliminatory:false, eliminatoryThreshold:1, services:['Tous'],
+       modalities:'5:politique RSE formalisée | 3:engagement partiel | 1:aucune démarche'},
+    ]
+  }
+};
+
+// ── STATE ────────────────────────────────────────────────
+let ST = {user:null, service:null, userId:null, page:'login',
+          suppId:null, formData:{}, impBuf:[], admOpen:false, cfg:null, suppliers:{}};
+
+// ── STORAGE ──────────────────────────────────────────────
+const Store = {
+  save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},
+  load(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+  clear(){['fg_cfg','fg_sup','fg_ses'].forEach(k=>localStorage.removeItem(k))}
+};
+
+// ── CALCUL ───────────────────────────────────────────────
+const Calc = {
+  allKeys(){return[...ST.cfg.criteria.axe1,...ST.cfg.criteria.axe2].map(c=>c.key)},
+  pct(s){const k=this.allKeys(),n=k.filter(k=>s.scores&&s.scores[k]!=null).length;return Math.round(n/k.length*100)},
+  axeScore(s,axe){
+    const cs=ST.cfg.criteria[axe];let w=0,t=0;
+    cs.forEach(c=>{if(s.scores&&s.scores[c.key]!=null){w+=(s.scores[c.key]/5)*c.weight;t+=c.weight;}});
+    return t===0?null:(w/100)*50;
+  },
+  elim(s){
+    const out=[];
+    [...ST.cfg.criteria.axe1,...ST.cfg.criteria.axe2].forEach(c=>{
+      if(!c.eliminatory)return;
+      const sc=s.scores?.[c.key];if(sc==null)return;
+      const thr=c.eliminatoryThreshold??1;
+      if(sc<thr)out.push(thr>1?`${c.label} (note ${sc} < seuil ${thr})`:`${c.label} (note 0)`);
+    });
+    return out;
+  },
+  decision(s){
+    if(this.pct(s)===0)return 'INCOMPLET';
+    if(this.elim(s).length>0)return 'ELIMINER';
+    const s1=this.axeScore(s,'axe1'),s2=this.axeScore(s,'axe2');
+    if(s1==null||s2==null)return 'EN_COURS';
+    const v=s1>=30,r=s2>=35?'lo':s2>=20?'mi':'hi';
+    if(v&&r==='lo')return 'CONSERVER';if(v&&r==='mi')return 'MAINTENIR';
+    if(!v&&r==='lo')return 'REGROUPER';return 'ELIMINER';
+  },
+  scores(s){const s1=this.axeScore(s,'axe1'),s2=this.axeScore(s,'axe2');return{s1,s2,total:(s1!=null&&s2!=null)?s1+s2:null}},
+  canEdit(c){if(ST.service==='Direction')return true;const sv=c.services||['Tous'];return sv.includes('Tous')||sv.includes(ST.service)},
+  svcLabel(c){const sv=c.services||['Tous'];return sv.includes('Tous')?'Tous':sv.join(', ')}
+};
+
+let decChart=null;
+function uid(){return 'sup_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function fmt(n){return n?Number(n).toLocaleString('fr-FR')+'€':'—'}
+
+// ── APP ──────────────────────────────────────────────────
+const App = {
+
+  init(){
+    ST.cfg = Store.load('fg_cfg', JSON.parse(JSON.stringify(DEF_CFG)));
+    if(!ST.cfg.users) ST.cfg.users = DEF_CFG.users;
+    ST.suppliers = Store.load('fg_sup', {});
+    const ses = Store.load('fg_ses', null);
+    if(ses){
+      const u = ST.cfg.users?.find(x=>x.id===ses.id&&x.actif);
+      if(u){ST.user=u.nom;ST.service=u.service;ST.userId=u.id;this.nav('dashboard');return;}
+    }
+    document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>this.nav(el.dataset.page)));
+    document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.add('hidden')}));
+  },
+
+  // ── AUTH ───────────────────────────────────────────────
+  login(){
+    const login=document.getElementById('l-login').value.trim();
+    const pw=document.getElementById('l-pw').value;
+    const u=ST.cfg.users?.find(x=>x.login===login&&x.password===pw&&x.actif);
+    if(!u){document.getElementById('l-err').classList.remove('hidden');return;}
+    document.getElementById('l-err').classList.add('hidden');
+    ST.user=u.nom;ST.service=u.service;ST.userId=u.id;
+    Store.save('fg_ses',{id:u.id});
+    this.nav('dashboard');
+  },
+
+  logout(){
+    ST.user=null;ST.service=null;ST.userId=null;
+    Store.save('fg_ses',null);
+    document.getElementById('l-login').value='';
+    document.getElementById('l-pw').value='';
+    document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+    document.getElementById('page-login').classList.add('active');
+    document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active','border-b-2','border-blue-600','text-blue-600'));
+    document.getElementById('nav-badge').classList.add('hidden');
+  },
+
+  // ── NAV ────────────────────────────────────────────────
+  nav(p){
+    document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+    document.getElementById('page-'+p)?.classList.add('active');
+    document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active','border-b-2','border-blue-600','text-blue-600'));
+    const lk=document.querySelector('[data-page="'+p+'"]');
+    if(lk)lk.classList.add('active','border-b-2','border-blue-600','text-blue-600');
+    ST.page=p;
+    const nb=document.getElementById('nav-badge');
+    if(ST.user){
+      const col=SVC_COLORS[ST.service]||'#2563eb';
+      nb.innerHTML=`${esc(ST.user)} <span style="background:${col};color:#fff" class="svc-tag">${esc(ST.service)}</span>`;
+      nb.classList.remove('hidden');
+    }
+    if(p==='dashboard')this.renderDB();
+    if(p==='suppliers')this.renderList();
+    if(p==='admin')this.renderAdm();
+  },
+
+  // ── LIST ───────────────────────────────────────────────
+  renderList(){
+    const search=(document.getElementById('f-search')?.value||'').toLowerCase();
+    const spec=document.getElementById('f-spec')?.value||'';
+    const reg=document.getElementById('f-reg')?.value||'';
+    const dec=document.getElementById('f-dec')?.value||'';
+    const specs=[...new Set(Object.values(ST.suppliers).map(s=>s.specialty).filter(Boolean))].sort();
+    const regs=[...new Set(Object.values(ST.suppliers).map(s=>s.region).filter(Boolean))].sort();
+    const ss=document.getElementById('f-spec'),rs=document.getElementById('f-reg');
+    const cv=ss.value,cr=rs.value;
+    ss.innerHTML='<option value="">Toutes</option>'+specs.map(x=>`<option ${x===cv?'selected':''}>${esc(x)}</option>`).join('');
+    rs.innerHTML='<option value="">Toutes</option>'+regs.map(x=>`<option ${x===cr?'selected':''}>${esc(x)}</option>`).join('');
+    let list=Object.values(ST.suppliers);
+    if(search)list=list.filter(s=>s.name.toLowerCase().includes(search)||String(s.numero||'').toLowerCase().includes(search));
+    if(spec)list=list.filter(s=>s.specialty===spec);
+    if(reg)list=list.filter(s=>s.region===reg);
+    list=list.map(s=>({...s,_p:Calc.pct(s),_sc:Calc.scores(s),_d:s.manualDecision||Calc.decision(s)}));
+    if(dec)list=list.filter(s=>s._d===dec);
+    list.sort((a,b)=>a.name.localeCompare(b.name));
+    document.getElementById('f-count').textContent=list.length+' fournisseur(s)';
+    const tb=document.getElementById('list-body');
+    if(!list.length){tb.innerHTML='<tr><td colspan="10" class="text-center py-10 text-gray-400">Aucun résultat.</td></tr>';return;}
+    tb.innerHTML=list.map(s=>{
+      const el=Calc.elim(s),sc=s._sc.total!=null?s._sc.total.toFixed(1):'—';
+      return `<tr class="hover:bg-gray-50 border-b border-gray-50 cursor-pointer" onclick="App.openS('${s.id}')">
+        <td class="px-4 py-3 text-xs text-gray-400 font-mono">${esc(s.numero||'—')}</td>
+        <td class="px-4 py-3 font-medium text-gray-800">${esc(s.name)}</td>
+        <td class="px-4 py-3 text-gray-500">${esc(s.specialty||'—')}</td>
+        <td class="px-4 py-3 text-gray-400 text-xs">${esc(s.region||'—')}</td>
+        <td class="px-4 py-3 text-xs text-gray-500">${s.caRealise?Number(s.caRealise).toLocaleString('fr-FR')+'€':'—'}</td>
+        <td class="px-4 py-3"><div class="flex items-center gap-2">
+          <div class="h-1.5 bg-gray-100 rounded-full w-16 flex-shrink-0"><div class="h-full rounded-full ${s._p===100?'bg-green-500':s._p>0?'bg-blue-400':'bg-gray-200'}" style="width:${s._p}%"></div></div>
+          <span class="text-xs text-gray-400">${s._p}%</span></div></td>
+        <td class="px-4 py-3 font-semibold ${s._sc.total!=null?'text-blue-700':'text-gray-300'}">${sc}</td>
+        <td class="px-4 py-3"><span class="badge-${s._d} text-xs px-2 py-0.5 rounded-full font-medium">${s._d.replace('_',' ')}</span></td>
+        <td class="px-4 py-3 text-xs ${el.length?'text-red-500 font-medium':'text-gray-300'}">${el.length?'⚠️ '+el.length:'—'}</td>
+        <td class="px-4 py-3"><button onclick="event.stopPropagation();App.delS('${s.id}')" class="text-gray-300 hover:text-red-400">✕</button></td>
+      </tr>`;
+    }).join('');
+  },
+
+  clearF(){['f-search','f-spec','f-reg','f-dec'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});this.renderList()},
+
+  // ── FORM ───────────────────────────────────────────────
+  openS(id){
+    ST.suppId=id;const s=ST.suppliers[id];if(!s)return;
+    ST.formData=JSON.parse(JSON.stringify(s));
+    if(!ST.formData.scores)ST.formData.scores={};
+    if(!ST.formData.comments)ST.formData.comments={};
+    if(!ST.formData.expiries)ST.formData.expiries={};
+    document.getElementById('form-name').textContent=s.name;
+    document.getElementById('form-meta').textContent=[s.numero?'N°'+s.numero:'',s.specialty,s.region].filter(Boolean).join(' · ');
+    document.getElementById('form-numero').value=s.numero||'';
+    document.getElementById('form-spec').value=s.specialty||'';
+    document.getElementById('form-region').value=s.region||'';
+    document.getElementById('form-ca').value=s.caAnnuel||'';
+    document.getElementById('form-ca-realise').value=s.caRealise||'';
+    document.getElementById('form-notes').value=s.notes||'';
+    document.getElementById('form-man-dec').value=s.manualDecision||'';
+    document.getElementById('form-dec-cmt').value=s.decisionComment||'';
+    document.getElementById('form-owner').value=s.owner||'';
+    document.getElementById('form-deadline').value=s.deadline||'';
+    document.getElementById('form-actions').value=s.actions||'';
+    this.renderAxe('axe1');this.renderAxe('axe2');this.updScores();
+    document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+    document.getElementById('page-supplier-form').classList.add('active');
+    ST.page='supplier-form';window.scrollTo(0,0);
+  },
+
+  renderAxe(axe){
+    const cont=document.getElementById(axe+'-body');
+    const cs=ST.cfg.criteria[axe];
+    const mine=cs.filter(c=>Calc.canEdit(c)),others=cs.filter(c=>!Calc.canEdit(c));
+    let html='';
+    mine.forEach(c=>{html+=this.renderCrit(c,true)});
+    if(others.length){
+      html+=`<div class="px-5 py-2 bg-gray-100 text-xs text-gray-400 font-semibold uppercase tracking-wide">Critères d'autres services — lecture seule</div>`;
+      others.forEach(c=>{html+=this.renderCrit(c,false)});
+    }
+    cont.innerHTML=html;
+  },
+
+  renderCrit(c,editable){
+    const score=ST.formData.scores[c.key],comment=ST.formData.comments[c.key]||'',expiry=ST.formData.expiries[c.key]||'';
+    const thr=c.eliminatoryThreshold??1,isElim=c.eliminatory&&score!=null&&score<thr;
+    const svLbl=Calc.svcLabel(c);
+    const col=SVC_COLORS[c.services?.[0]]||'#6b7280';
+    const svBadge=`<span class="svc-tag" style="background:${col}20;color:${col}">${esc(svLbl)}</span>`;
+
+    if(!editable){
+      const scTxt=score!=null
+        ?`<span class="inline-block w-7 h-7 rounded-lg text-xs font-bold text-center leading-7 ${score===0?'bg-red-100 text-red-600':score<=2?'bg-orange-100 text-orange-600':score<=3?'bg-yellow-100 text-yellow-700':'bg-green-100 text-green-700'}">${score}</span>`
+        :`<span class="text-gray-300 text-xs italic">—</span>`;
+      return `<div class="px-5 py-3 bg-gray-50 opacity-70">
+        <div class="flex items-center justify-between gap-3">
+          <div><div class="flex items-center gap-2 flex-wrap">
+            <span class="text-sm text-gray-400">${esc(c.label)}</span>
+            ${c.eliminatory?'<span class="text-red-400 text-xs">ÉLIMINATOIRE</span>':''}
+            ${svBadge}</div>
+            <p class="text-xs text-gray-300">Poids : ${c.weight}%</p></div>
+          <div class="flex items-center gap-2 shrink-0">${scTxt}${comment?`<span class="text-xs text-gray-400 italic max-w-xs truncate">"${esc(comment)}"</span>`:''}</div>
+        </div></div>`;
+    }
+
+    const btns=[0,1,2,3,4,5].map(v=>{
+      const wouldElim=c.eliminatory&&v<thr,sel=score===v;
+      let cls=sel?(wouldElim?'bg-red-600 text-white border-red-600':v<=2?'bg-orange-500 text-white border-orange-500':v<=3?'bg-yellow-500 text-white border-yellow-500':'bg-green-500 text-white border-green-500')
+               :(wouldElim?'bg-red-50 text-red-400 border-red-200 hover:bg-red-100':'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100');
+      const tt=wouldElim?"title=\"⚠️ Déclenche l'élimination\"":'';
+      return `<button onclick="App.setScore('${c.key}',${v})" ${tt} class="w-8 h-8 rounded-lg text-sm font-semibold border transition ${cls}">${v}</button>`;
+    }).join('');
+
+    return `<div class="px-5 py-4 ${isElim?'bg-red-50':''}">
+      <div class="flex items-start justify-between gap-3 mb-2">
+        <div class="flex-1"><div class="flex items-center gap-1 flex-wrap mb-0.5">
+          <span class="text-sm font-medium text-gray-700">${esc(c.label)}</span>
+          ${c.eliminatory?`<span class="text-red-500 text-xs font-semibold">ÉLIMINATOIRE (seuil ${thr})</span>`:''}
+          ${svBadge}
+          <div class="tooltip ml-1"><span class="text-gray-300 hover:text-gray-500 cursor-help text-xs">ⓘ</span><div class="tt">${esc(c.modalities)}</div></div>
+        </div><p class="text-xs text-gray-400">Poids : ${c.weight}%</p></div>
+        <div class="flex gap-1 shrink-0">${btns}</div>
+      </div>
+      ${c.hasExpiry?`<div class="flex items-center gap-2 mt-1 mb-2"><label class="text-xs text-gray-400">Expiration :</label>
+        <input type="date" value="${esc(expiry)}" onchange="App.setExpiry('${c.key}',this.value)" class="border border-gray-200 rounded px-2 py-0.5 text-xs"></div>`:''}
+      <input type="text" placeholder="Commentaire..." value="${esc(comment)}"
+        oninput="App.setComment('${c.key}',this.value)"
+        class="w-full text-xs border border-gray-100 bg-gray-50 rounded-lg px-3 py-1.5 text-gray-600 focus:outline-none focus:border-blue-300 mt-1">
+    </div>`;
+  },
+
+  setScore(k,v){ST.formData.scores[k]=v;const axe=ST.cfg.criteria.axe1.find(x=>x.key===k)?'axe1':'axe2';this.renderAxe(axe);this.updScores()},
+  setComment(k,v){ST.formData.comments[k]=v},
+  setExpiry(k,v){ST.formData.expiries[k]=v},
+
+  updScores(){
+    const s=ST.formData,sc=Calc.scores(s),p=Calc.pct(s),el=Calc.elim(s),dec=Calc.decision(s);
+    document.getElementById('axe1-sc').textContent=sc.s1!=null?sc.s1.toFixed(1)+'/50':'—/50';
+    document.getElementById('axe2-sc').textContent=sc.s2!=null?sc.s2.toFixed(1)+'/50':'—/50';
+    document.getElementById('form-total').textContent=sc.total!=null?sc.total.toFixed(1):'—';
+    document.getElementById('form-pct').textContent=p+'%';
+    document.getElementById('form-bar').style.width=p+'%';
+    document.getElementById('form-auto-dec').innerHTML=`<span class="badge-${dec} text-xs px-2 py-0.5 rounded-full font-medium">${dec.replace('_',' ')}</span>`;
+    const fin=document.getElementById('form-man-dec').value||dec;
+    const db=document.getElementById('form-dec-badge');
+    db.className=`badge-${fin} px-3 py-1 rounded-full text-sm font-semibold`;db.textContent=fin.replace('_',' ');
+    const ea=document.getElementById('form-elim-alert');
+    if(el.length){ea.classList.remove('hidden');document.getElementById('elim-detail').textContent=el.join(' | ');}
+    else ea.classList.add('hidden');
+  },
+
+  saveForm(){
+    const id=ST.suppId;if(!id)return;
+    const s=ST.suppliers[id];
+    s.numero=document.getElementById('form-numero').value.trim();
+    s.caAnnuel=parseFloat(document.getElementById('form-ca').value)||0;
+    s.caRealise=parseFloat(document.getElementById('form-ca-realise').value)||0;
+    s.notes=document.getElementById('form-notes').value;
+    s.scores={...ST.formData.scores};s.comments={...ST.formData.comments};s.expiries={...ST.formData.expiries};
+    s.manualDecision=document.getElementById('form-man-dec').value||null;
+    s.decisionComment=document.getElementById('form-dec-cmt').value;
+    s.owner=document.getElementById('form-owner').value;
+    s.deadline=document.getElementById('form-deadline').value;
+    s.actions=document.getElementById('form-actions').value;
+    s.updatedBy=ST.user;s.updatedAt=new Date().toISOString();
+    Store.save('fg_sup',ST.suppliers);
+    this.toast('Fiche enregistrée ✓','green');
+  },
+
+  delS(id){
+    const s=ST.suppliers[id];if(!s)return;
+    if(!confirm('⚠️ Supprimer "'+s.name+'" ?\n\nToutes ses données de scoring seront définitivement effacées.'))return;
+    delete ST.suppliers[id];Store.save('fg_sup',ST.suppliers);this.renderList();this.toast('Fournisseur supprimé.','red');
+  },
+
+  delCurrent(){
+    const id=ST.suppId,s=ST.suppliers[id];if(!s)return;
+    if(!confirm('⚠️ Supprimer "'+s.name+'" ?\n\nToutes ses données de scoring seront définitivement effacées.'))return;
+    delete ST.suppliers[id];Store.save('fg_sup',ST.suppliers);this.nav('suppliers');this.toast('Fournisseur supprimé.','red');
+  },
+
+  // ── IMPORT / EXPORT ────────────────────────────────────
+  normRow(r){
+    const g=(...ks)=>{for(const k of ks){if(r[k]!=null&&r[k]!=='')return String(r[k]).trim()}return ''};
+    return{
+      name:    g('Nom','nom','Name','name','RAISON SOCIALE','Raison sociale'),
+      numero:  g('numero','Numéro','numero fournisseur','Numéro fournisseur','N°','n°','id_fournisseur'),
+      specialty:g('spécialité','Spécialité','specialite','specialty','Specialty','SPÉCIALITÉ'),
+      region:  g('région','Région','region','Region','RÉGION','zone','Zone'),
+      caAnnuel:parseFloat(g('ca_annuel','CA annuel','CA','ca')||0)||0,
+      caRealise:parseFloat(g('ca_realise','CA réalisé','ca_realise','chiffre affaires','chiffre_affaires')||0)||0,
+      notes:   g('notes','Notes','remarques'),
+    };
+  },
+
+  showImport(){document.getElementById('modal-import').classList.remove('hidden');document.getElementById('imp-prev').classList.add('hidden');document.getElementById('imp-ok').classList.add('hidden');document.getElementById('imp-file').value=''},
+
+  readImpFile(ev){
+    const f=ev.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=e=>{
+      try{
+        let raw=[];
+        if(f.name.endsWith('.csv')){raw=this.parseCSV(e.target.result);}
+        else{const wb=XLSX.read(e.target.result,{type:'array'});raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});}
+        ST.impBuf=raw.map(r=>this.normRow(r)).filter(r=>r.name);
+        const rows=ST.impBuf;
+        document.getElementById('imp-prev').classList.remove('hidden');
+        document.getElementById('imp-prev-txt').textContent=rows.length+' fournisseur(s) détectés.';
+        document.getElementById('imp-prev-tbl').innerHTML=rows.slice(0,5).map(r=>`<div class="py-0.5 border-b border-gray-100">${r.numero?'['+esc(r.numero)+'] ':''}<strong>${esc(r.name)}</strong> · ${esc(r.specialty||'—')} · ${esc(r.region||'—')}</div>`).join('');
+        document.getElementById('imp-ok').classList.remove('hidden');
+      }catch(err){this.toast('Erreur lecture fichier.','red');}
+    };
+    f.name.endsWith('.csv')?r.readAsText(f,'UTF-8'):r.readAsArrayBuffer(f);
+  },
+
+  parseCSV(txt){
+    const lines=txt.split(/\r?\n/).filter(l=>l.trim());
+    const hd=lines[0].split(/[;,]/).map(h=>h.trim().replace(/"/g,''));
+    return lines.slice(1).map(ln=>{const v=ln.split(/[;,]/).map(x=>x.trim().replace(/"/g,''));const o={};hd.forEach((h,i)=>o[h]=v[i]||'');return o});
+  },
+
+  doImport(){
+    const rows=ST.impBuf;let added=0;
+    const newR=new Set();
+    rows.forEach(r=>{if(r.region&&!ST.cfg.regions.includes(r.region))newR.add(r.region)});
+    if(newR.size){ST.cfg.regions.push(...newR);Store.save('fg_cfg',ST.cfg);}
+    rows.forEach(r=>{
+      if(!r.name)return;
+      const id=uid();
+      ST.suppliers[id]={id,name:r.name,numero:r.numero,specialty:r.specialty,region:r.region,
+        caAnnuel:r.caAnnuel,caRealise:r.caRealise,notes:r.notes,
+        scores:{},comments:{},expiries:{},manualDecision:null,decisionComment:'',owner:'',deadline:'',actions:'',
+        createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),updatedBy:ST.user};
+      added++;
+    });
+    Store.save('fg_sup',ST.suppliers);
+    this.closeM('modal-import');this.renderList();
+    this.toast(added+' fournisseur(s) importé(s)'+(newR.size?' · '+newR.size+' région(s) ajoutée(s)':'')+ ' ✓','green');
+  },
+
+  showAdd(){
+    document.getElementById('add-reg').innerHTML=ST.cfg.regions.map(r=>`<option>${esc(r)}</option>`).join('');
+    const sps=[...new Set(Object.values(ST.suppliers).map(s=>s.specialty).filter(Boolean))].sort();
+    document.getElementById('spec-dl').innerHTML=sps.map(s=>`<option value="${esc(s)}">`).join('');
+    ['add-name','add-num','add-spec','add-ca','add-car'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('modal-add').classList.remove('hidden');
+  },
+
+  doAdd(){
+    const n=document.getElementById('add-name').value.trim();
+    if(!n){this.toast('Nom obligatoire.','red');return;}
+    const id=uid();
+    ST.suppliers[id]={id,name:n,
+      numero:document.getElementById('add-num').value.trim(),
+      specialty:document.getElementById('add-spec').value.trim(),
+      region:document.getElementById('add-reg').value,
+      caAnnuel:parseFloat(document.getElementById('add-ca').value)||0,
+      caRealise:parseFloat(document.getElementById('add-car').value)||0,
+      notes:'',scores:{},comments:{},expiries:{},manualDecision:null,decisionComment:'',owner:'',deadline:'',actions:'',
+      createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),updatedBy:ST.user};
+    Store.save('fg_sup',ST.suppliers);this.closeM('modal-add');this.renderList();this.toast('Fournisseur ajouté ✓','green');
+  },
+
+  exportExcel(){
+    const list=Object.values(ST.suppliers);
+    if(!list.length){this.toast('Aucun fournisseur.','red');return;}
+    const allC=[...ST.cfg.criteria.axe1,...ST.cfg.criteria.axe2];
+    const rows=list.map(s=>{
+      const sc=Calc.scores(s),p=Calc.pct(s),dec=s.manualDecision||Calc.decision(s);
+      const row={'N° Fournisseur':s.numero||'','Raison sociale':s.name,'Spécialité':s.specialty||'',
+        'Région':s.region||'','CA annuel estimé':s.caAnnuel||0,'CA réalisé N-1':s.caRealise||0,
+        'Complétude %':p,'Score Axe1':sc.s1!=null?+sc.s1.toFixed(2):'','Score Axe2':sc.s2!=null?+sc.s2.toFixed(2):'',
+        'Score total':sc.total!=null?+sc.total.toFixed(2):'','Décision':dec,
+        'Responsable':s.owner||'','Échéance':s.deadline||'','Actions':s.actions||'','Commentaire':s.decisionComment||''};
+      allC.forEach(c=>{row['Note - '+c.label]=s.scores?.[c.key]??'';row['Cmnt - '+c.label]=s.comments?.[c.key]||''});
+      return row;
+    });
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Fournisseurs');
+    XLSX.writeFile(wb,'rationalisation-'+new Date().toISOString().slice(0,10)+'.xlsx');
+    this.toast('Export Excel ✓','green');
+  },
+
+  exportJSON(){
+    const d={config:ST.cfg,suppliers:ST.suppliers,exportedAt:new Date().toISOString(),exportedBy:ST.user};
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));
+    a.download='fg-sauvegarde-'+new Date().toISOString().slice(0,10)+'.json';a.click();
+    this.toast('Sauvegarde téléchargée ✓','green');
+  },
+
+  loadJSON(ev){
+    const f=ev.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=e=>{try{const d=JSON.parse(e.target.result);
+      if(d.suppliers)ST.suppliers=d.suppliers;if(d.config)ST.cfg=d.config;
+      Store.save('fg_sup',ST.suppliers);Store.save('fg_cfg',ST.cfg);
+      this.nav('dashboard');this.toast('Données chargées ✓','green');
+    }catch(e){this.toast('Fichier invalide.','red');}};
+    r.readAsText(f,'UTF-8');ev.target.value='';
+  },
+
+  // ── DASHBOARD ──────────────────────────────────────────
+  renderDB(){
+    const list=Object.values(ST.suppliers),total=list.length;
+    const decs={CONSERVER:0,MAINTENIR:0,REGROUPER:0,ELIMINER:0,EN_COURS:0,INCOMPLET:0};
+    let totP=0;
+    list.forEach(s=>{const d=s.manualDecision||Calc.decision(s);decs[d]=(decs[d]||0)+1;totP+=Calc.pct(s)});
+    const avgP=total?Math.round(totP/total):0;
+    document.getElementById('db-stats').innerHTML=[
+      {v:total,l:'Fournisseurs',c:'text-gray-800'},{v:avgP+'%',l:'Complétude moy.',c:'text-blue-600'},
+      {v:decs.CONSERVER,l:'À conserver',c:'text-green-600'},{v:decs.ELIMINER,l:'À éliminer',c:'text-red-600'},
+    ].map(x=>`<div class="bg-white rounded-xl shadow p-4 text-center"><div class="text-3xl font-bold ${x.c}">${x.v}</div><div class="text-xs text-gray-400 mt-1">${x.l}</div></div>`).join('');
+
+    const mq=[
+      {l:'Valeur forte\n+ Risque faible',d:'CONSERVER',c:'bg-green-100 border-green-300 text-green-800',fn:s=>{const sc=Calc.scores(s);return sc.s1>=30&&sc.s2>=35&&!Calc.elim(s).length&&sc.s1!=null&&sc.s2!=null}},
+      {l:'Valeur forte\n+ Risque moyen',d:'MAINTENIR',c:'bg-yellow-100 border-yellow-300 text-yellow-800',fn:s=>{const sc=Calc.scores(s);return sc.s1>=30&&sc.s2>=20&&sc.s2<35&&!Calc.elim(s).length&&sc.s1!=null&&sc.s2!=null}},
+      {l:'Valeur faible\n+ Risque faible',d:'REGROUPER',c:'bg-blue-100 border-blue-300 text-blue-800',fn:s=>{const sc=Calc.scores(s);return sc.s1<30&&sc.s2>=35&&!Calc.elim(s).length&&sc.s1!=null&&sc.s2!=null}},
+      {l:'Valeur faible\n+ Risque élevé',d:'ELIMINER',c:'bg-red-100 border-red-300 text-red-800',fn:s=>(s.manualDecision||Calc.decision(s))==='ELIMINER'},
+    ];
+    document.getElementById('matrix-grid').innerHTML=mq.map(q=>`<div class="border-2 ${q.c} rounded-xl p-3 text-center">
+      <div class="text-2xl font-bold mb-1">${list.filter(q.fn).length}</div>
+      <div class="text-xs font-medium">${q.d}</div>
+      <div class="text-xs opacity-60 mt-0.5 whitespace-pre-line leading-tight">${q.l}</div></div>`).join('');
+
+    if(decChart)decChart.destroy();
+    const ctx=document.getElementById('dec-chart').getContext('2d');
+    const lbls=Object.keys(decs).filter(k=>decs[k]>0);
+    const cols={CONSERVER:'#16a34a',MAINTENIR:'#d97706',REGROUPER:'#2563eb',ELIMINER:'#dc2626',EN_COURS:'#6b7280',INCOMPLET:'#d1d5db'};
+    decChart=new Chart(ctx,{type:'doughnut',data:{labels:lbls,datasets:[{data:lbls.map(l=>decs[l]),backgroundColor:lbls.map(l=>cols[l]),borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}});
+
+    const bySp={};
+    list.forEach(s=>{const k=s.specialty||'Sans spécialité';if(!bySp[k])bySp[k]={t:0,c:0};bySp[k].t++;bySp[k].c+=Calc.pct(s)});
+    document.getElementById('sp-prog').innerHTML=Object.entries(bySp).sort((a,b)=>a[1].c/a[1].t-b[1].c/b[1].t).slice(0,8).map(([sp,d])=>{
+      const avg=Math.round(d.c/d.t);
+      return `<div><div class="flex justify-between text-xs mb-0.5 text-gray-500"><span>${esc(sp)} <span class="text-gray-300">(${d.t})</span></span><span>${avg}%</span></div>
+        <div class="h-1.5 bg-gray-100 rounded-full"><div class="h-full ${avg>=80?'bg-green-400':avg>=40?'bg-blue-400':'bg-red-300'} rounded-full" style="width:${avg}%"></div></div></div>`;
+    }).join('')||'<p class="text-gray-400 text-xs">Aucune donnée.</p>';
+
+    document.getElementById('prio-list').innerHTML=list.filter(s=>Calc.elim(s).length>0||Calc.pct(s)===0).slice(0,6).map(s=>`
+      <div class="flex justify-between items-center py-1 border-b border-gray-50 cursor-pointer hover:bg-gray-50 px-1 rounded" onclick="App.openS('${s.id}')">
+        <span class="text-gray-700">${s.numero?`<span class="text-xs text-gray-300 font-mono">${esc(s.numero)}</span> `:''}${esc(s.name)}</span>
+        <span class="text-xs ${Calc.elim(s).length?'text-red-500 font-medium':'text-gray-400'}">${Calc.elim(s).length?'⚠️ éliminatoire':'non commencé'}</span>
+      </div>`).join('')||'<p class="text-gray-400 text-xs">Aucune priorité.</p>';
+  },
+
+  // ── ADMIN ──────────────────────────────────────────────
+  renderAdm(){
+    document.getElementById('admin-gate').classList.remove('hidden');
+    document.getElementById('admin-panel').classList.add('hidden');
+    if(ST.admOpen)this.showAdmPanel();
+  },
+
+  chkPw(){
+    if(document.getElementById('adm-pw').value===ST.cfg.adminPassword){ST.admOpen=true;this.showAdmPanel();}
+    else document.getElementById('pw-err').classList.remove('hidden');
+  },
+
+  lockAdm(){ST.admOpen=false;document.getElementById('admin-gate').classList.remove('hidden');document.getElementById('admin-panel').classList.add('hidden');document.getElementById('adm-pw').value='';},
+
+  showAdmPanel(){
+    document.getElementById('admin-gate').classList.add('hidden');
+    document.getElementById('admin-panel').classList.remove('hidden');
+
+    // Users list
+    this.renderUsersList();
+
+    // Weights
+    ['axe1','axe2'].forEach(axe=>{
+      document.getElementById('w-'+axe).innerHTML=ST.cfg.criteria[axe].map(c=>`
+        <div class="flex items-center justify-between">
+          <label class="text-xs text-gray-600 flex-1">${esc(c.label)}</label>
+          <input type="number" value="${c.weight}" min="0" max="100" class="w-14 border border-gray-200 rounded px-1 py-0.5 text-xs text-right w-inp-${axe}" data-key="${c.key}" oninput="App.updWT('${axe}')"> <span class="text-xs text-gray-400 ml-1">%</span>
+        </div>`).join('');
+      this.updWT(axe);
+    });
+
+    // Criteria
+    const allC=[...ST.cfg.criteria.axe1,...ST.cfg.criteria.axe2];
+    document.getElementById('adm-criteria').innerHTML=allC.map(c=>{
+      const thr=c.eliminatoryThreshold??1,svcs=c.services||['Tous'],tousChk=svcs.includes('Tous');
+      return `<div class="border ${c.eliminatory?'border-red-200 bg-red-50':'border-gray-100'} rounded-lg p-3">
+        <input type="text" value="${esc(c.label)}" class="w-full text-sm border border-gray-200 rounded px-2 py-1 bg-white mb-2" onchange="App.updLbl('${c.key}',this.value)">
+        <div class="flex items-center gap-4 mb-2 p-2 bg-white rounded-lg border border-gray-100 flex-wrap">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="ec-${c.key}" ${c.eliminatory?'checked':''} onchange="App.updElim('${c.key}',this.checked)">
+            <span class="text-xs font-semibold text-red-600">Éliminatoire</span>
+          </label>
+          <div id="et-${c.key}" class="${c.eliminatory?'':'opacity-30 pointer-events-none'} flex items-center gap-2">
+            <span class="text-xs text-gray-500">Note minimale :</span>
+            <select onchange="App.updThr('${c.key}',this.value)" class="border border-gray-200 rounded px-2 py-0.5 text-xs bg-white">
+              ${[1,2,3,4,5].map(v=>`<option value="${v}" ${thr==v?'selected':''}>${v}${v===1?' (note 0 seul.)':v===3?' (< moyenne)':''}</option>`).join('')}
+            </select>
+            <span class="text-xs text-gray-400" id="et-info-${c.key}">→ note &lt; ${thr}</span>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <label class="flex items-center gap-1 text-xs cursor-pointer">
+            <input type="checkbox" data-cr="${c.key}" data-sv="Tous" ${tousChk?'checked':''} onchange="App.updSvc('${c.key}',this)">
+            <span class="font-medium text-blue-600">Tous</span>
+          </label>
+          ${ALL_SVC.map(sv=>`<label class="flex items-center gap-1 text-xs cursor-pointer ${tousChk?'opacity-40':''}">
+            <input type="checkbox" data-cr="${c.key}" data-sv="${sv}" ${svcs.includes(sv)?'checked':''} ${tousChk?'disabled':''} onchange="App.updSvc('${c.key}',this)">
+            ${sv}</label>`).join('')}
+        </div>
+        <textarea class="w-full text-xs border border-gray-100 rounded px-2 py-1 text-gray-400 bg-gray-50 mt-2" rows="2" onchange="App.updMod('${c.key}',this.value)">${esc(c.modalities)}</textarea>
+      </div>`;
+    }).join('');
+
+    this.renderRegs();
+  },
+
+  // Users management
+  renderUsersList(){
+    const users=ST.cfg.users||[];
+    document.getElementById('users-list').innerHTML=users.map((u,i)=>`
+      <div class="flex items-center gap-3 border border-gray-100 rounded-lg px-3 py-2">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium text-gray-700">${esc(u.nom)}</span>
+            <span class="text-xs text-gray-400 font-mono">${esc(u.login)}</span>
+            <span class="svc-tag text-xs" style="background:${SVC_COLORS[u.service]||'#6b7280'}20;color:${SVC_COLORS[u.service]||'#6b7280'}">${esc(u.service)}</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <label class="flex items-center gap-1 text-xs cursor-pointer">
+            <input type="checkbox" ${u.actif?'checked':''} onchange="App.toggleUser('${u.id}',this.checked)">
+            <span class="${u.actif?'text-green-600':'text-gray-400'}">${u.actif?'Actif':'Inactif'}</span>
+          </label>
+          <button onclick="App.resetUserPw('${u.id}')" class="text-xs text-blue-500 hover:underline">⟳ MDP</button>
+          ${u.id!=='u0'?`<button onclick="App.delUser('${u.id}')" class="text-xs text-red-400 hover:text-red-600">✕</button>`:''}
+        </div>
+      </div>`).join('')||'<p class="text-gray-400 text-xs">Aucun utilisateur.</p>';
+  },
+
+  addUser(){
+    const nom=document.getElementById('nu-nom').value.trim();
+    const login=document.getElementById('nu-login').value.trim();
+    const pw=document.getElementById('nu-pw').value;
+    const svc=document.getElementById('nu-svc').value;
+    if(!nom||!login||!pw){this.toast('Tous les champs sont obligatoires.','red');return;}
+    if(ST.cfg.users.find(u=>u.login===login)){this.toast('Cet identifiant existe déjà.','red');return;}
+    if(!ST.cfg.users)ST.cfg.users=[];
+    ST.cfg.users.push({id:'u'+Date.now(),login,password:pw,nom,service:svc,actif:true});
+    Store.save('fg_cfg',ST.cfg);
+    ['nu-nom','nu-login','nu-pw'].forEach(id=>document.getElementById(id).value='');
+    this.renderUsersList();this.toast('Utilisateur ajouté ✓','green');
+  },
+
+  toggleUser(id,actif){
+    const u=ST.cfg.users?.find(x=>x.id===id);if(!u)return;
+    if(id==='u0'&&!actif){this.toast("Impossible de désactiver le compte admin.","red");this.renderUsersList();return;}
+    u.actif=actif;Store.save('fg_cfg',ST.cfg);this.renderUsersList();
+    this.toast(actif?'Compte activé ✓':'Compte désactivé.', actif?'green':'red');
+  },
+
+  resetUserPw(id){
+    const u=ST.cfg.users?.find(x=>x.id===id);if(!u)return;
+    const np=prompt('Nouveau mot de passe pour '+u.nom+' :');
+    if(!np||np.length<4){this.toast('Mot de passe trop court (4 car. min).','red');return;}
+    u.password=np;Store.save('fg_cfg',ST.cfg);this.toast('Mot de passe réinitialisé ✓','green');
+  },
+
+  delUser(id){
+    if(!confirm('Supprimer cet utilisateur ?'))return;
+    ST.cfg.users=ST.cfg.users.filter(u=>u.id!==id);
+    Store.save('fg_cfg',ST.cfg);this.renderUsersList();this.toast('Utilisateur supprimé.','red');
+  },
+
+  // Weights / criteria / regions
+  updWT(axe){
+    let t=0;document.querySelectorAll('.w-inp-'+axe).forEach(i=>t+=parseFloat(i.value)||0);
+    const el=document.getElementById('t-'+axe);el.textContent=t+'%';el.className=`font-medium ${Math.round(t)===100?'text-green-600':'text-red-500'}`;
+  },
+
+  saveW(){
+    let ok=true;
+    ['axe1','axe2'].forEach(axe=>{
+      let t=0;
+      document.querySelectorAll('.w-inp-'+axe).forEach(i=>{
+        const k=i.dataset.key,w=parseFloat(i.value)||0;t+=w;
+        const c=ST.cfg.criteria[axe].find(x=>x.key===k);if(c)c.weight=w;
+      });
+      if(Math.round(t)!==100)ok=false;
+    });
+    if(!ok){this.toast('La somme doit être 100% par axe.','red');return;}
+    Store.save('fg_cfg',ST.cfg);this.toast('Pondérations sauvegardées ✓','green');
+  },
+
+  findC(k){return[...ST.cfg.criteria.axe1,...ST.cfg.criteria.axe2].find(x=>x.key===k)},
+  updLbl(k,v){const c=this.findC(k);if(c)c.label=v;Store.save('fg_cfg',ST.cfg)},
+  updMod(k,v){const c=this.findC(k);if(c)c.modalities=v;Store.save('fg_cfg',ST.cfg)},
+
+  updElim(k,chk){
+    const c=this.findC(k);if(!c)return;c.eliminatory=chk;
+    const el=document.getElementById('et-'+k);
+    if(el){el.classList.toggle('opacity-30',!chk);el.classList.toggle('pointer-events-none',!chk);}
+    Store.save('fg_cfg',ST.cfg);this.showAdmPanel();
+  },
+
+  updThr(k,v){
+    const c=this.findC(k);if(!c)return;c.eliminatoryThreshold=parseInt(v);
+    const info=document.getElementById('et-info-'+k);if(info)info.textContent='→ note < '+v;
+    Store.save('fg_cfg',ST.cfg);
+  },
+
+  updSvc(k,cb){
+    const sv=cb.dataset.sv,c=this.findC(k);if(!c)return;
+    if(!c.services)c.services=[];
+    if(sv==='Tous'){c.services=cb.checked?['Tous']:[];Store.save('fg_cfg',ST.cfg);this.showAdmPanel();return;}
+    if(cb.checked){if(!c.services.includes(sv))c.services.push(sv);}
+    else c.services=c.services.filter(s=>s!==sv);
+    Store.save('fg_cfg',ST.cfg);
+  },
+
+  renderRegs(){
+    document.getElementById('adm-regions').innerHTML=ST.cfg.regions.map((r,i)=>`
+      <span class="flex items-center gap-1 bg-gray-100 rounded-full px-3 py-1 text-sm text-gray-700">
+        ${esc(r)}<button onclick="App.delReg(${i})" class="text-gray-400 hover:text-red-500 ml-1 text-xs">✕</button>
+      </span>`).join('');
+  },
+
+  addReg(){const v=document.getElementById('new-reg').value.trim();if(!v)return;ST.cfg.regions.push(v);Store.save('fg_cfg',ST.cfg);document.getElementById('new-reg').value='';this.renderRegs()},
+  delReg(i){ST.cfg.regions.splice(i,1);Store.save('fg_cfg',ST.cfg);this.renderRegs()},
+
+  chgPw(){
+    const pw=document.getElementById('new-pw').value.trim();
+    if(!pw||pw.length<4){this.toast('4 caractères min.','red');return;}
+    ST.cfg.adminPassword=pw;Store.save('fg_cfg',ST.cfg);document.getElementById('new-pw').value='';this.toast('Mot de passe admin modifié ✓','green');
+  },
+
+  resetAll(){
+    if(!confirm('ATTENTION : toutes les données seront effacées. Confirmer ?'))return;
+    Store.clear();ST.suppliers={};ST.cfg=JSON.parse(JSON.stringify(DEF_CFG));ST.user=null;
+    document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+    document.getElementById('page-login').classList.add('active');
+    this.toast('Données réinitialisées.','red');
+  },
+
+  closeM(id){document.getElementById(id).classList.add('hidden')},
+
+  toast(msg,color='green'){
+    const t=document.getElementById('toast'),m=document.getElementById('toast-msg');
+    m.textContent=msg;m.className='px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white '+(color==='green'?'bg-green-600':'bg-red-500');
+    t.classList.remove('hidden');setTimeout(()=>t.classList.add('hidden'),2800);
+  }
+};
+
+App.init();
+</script>
+</body>
+</html>
