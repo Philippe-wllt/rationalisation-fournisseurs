@@ -473,61 +473,119 @@ function fmt(n){return n?Number(n).toLocaleString('fr-FR')+'€':'—'}
 const SUPABASE_URL = 'https://zznhgduskwhcnegxuxqz.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6bmhnZHVza3doY25lZ3h1eHF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5OTM0MTYsImV4cCI6MjEwNzU2OTQxNn0.4U3YzL9TSUUQy-GfyJ8EMJt9I_LX5s2drI_--dJKKl8';
 
-let _sbClient = null, _sbChannel = null;
+let _sbClient = null, _sbChannel = null, _sbUsersChannel = null;
+
 const SB = {
   ok(){ return !!_sbClient; },
+
   async init(){
-    if(!SUPABASE_URL||!SUPABASE_KEY) return;
+    if(!SUPABASE_URL || !SUPABASE_KEY) return;
     try{
       _sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       const {error} = await _sbClient.from('suppliers').select('id').limit(1);
       if(error) throw error;
-      const el=document.getElementById('sb-status'); if(el) el.classList.remove('hidden');
-      this.subscribe();
-      await this.loadAll();
-    }catch(e){ console.warn('Supabase:', e.message); _sbClient=null; }
+      const el = document.getElementById('sb-status'); if(el) el.classList.remove('hidden');
+      this.subscribeSuppliers();
+      this.subscribeUsers();
+      await Promise.all([this.loadAll(), this.loadUsers()]);
+    }catch(e){
+      console.warn('Supabase non disponible:', e.message);
+      _sbClient = null;
+    }
   },
+
+  // ── FOURNISSEURS ─────────────────────────────────────────
   async loadAll(){
     if(!_sbClient) return;
     try{
-      const {data,error}=await _sbClient.from('suppliers').select('*');
+      const {data, error} = await _sbClient.from('suppliers').select('*');
       if(error) throw error;
-      if(data&&data.length){
-        data.forEach(r=>{const s=this.fromRow(r);ST.suppliers[s.id]=s;});
-        Store.save('fg_sup',ST.suppliers);
-        if(ST.page==='suppliers') App.renderList();
-        if(ST.page==='dashboard') App.renderDB();
+      if(data && data.length){
+        data.forEach(r => { const s = this.fromRow(r); ST.suppliers[s.id] = s; });
+        Store.save('fg_sup', ST.suppliers);
+        if(ST.page === 'suppliers') App.renderList();
+        if(ST.page === 'dashboard') App.renderDB();
       }
-    }catch(e){console.warn('SB loadAll:',e.message);}
+    }catch(e){ console.warn('SB loadAll:', e.message); }
   },
+
   async upsert(s){
     if(!_sbClient) return;
-    try{ const {error}=await _sbClient.from('suppliers').upsert(this.toRow(s)); if(error) throw error; }
-    catch(e){console.warn('SB upsert:',e.message);}
+    try{ const {error} = await _sbClient.from('suppliers').upsert(this.toRow(s)); if(error) throw error; }
+    catch(e){ console.warn('SB upsert:', e.message); }
   },
+
   async upsertMany(list){
-    if(!_sbClient||!list.length) return;
-    try{ const {error}=await _sbClient.from('suppliers').upsert(list.map(s=>this.toRow(s))); if(error) throw error; }
-    catch(e){console.warn('SB upsertMany:',e.message);}
+    if(!_sbClient || !list.length) return;
+    try{ const {error} = await _sbClient.from('suppliers').upsert(list.map(s => this.toRow(s))); if(error) throw error; }
+    catch(e){ console.warn('SB upsertMany:', e.message); }
   },
+
   async remove(id){
     if(!_sbClient) return;
-    try{ const {error}=await _sbClient.from('suppliers').delete().eq('id',id); if(error) throw error; }
-    catch(e){console.warn('SB remove:',e.message);}
+    try{ const {error} = await _sbClient.from('suppliers').delete().eq('id', id); if(error) throw error; }
+    catch(e){ console.warn('SB remove:', e.message); }
   },
-  subscribe(){
-    if(!_sbClient||_sbChannel) return;
-    _sbChannel=_sbClient.channel('suppliers-rt')
-      .on('postgres_changes',{event:'*',schema:'public',table:'suppliers'},payload=>{
-        if(payload.eventType==='DELETE'){ delete ST.suppliers[payload.old.id]; }
-        else{ const s=this.fromRow(payload.new); ST.suppliers[s.id]=s; }
-        Store.save('fg_sup',ST.suppliers);
-        if(ST.page==='suppliers') App.renderList();
-        if(ST.page==='dashboard') App.renderDB();
+
+  subscribeSuppliers(){
+    if(!_sbClient || _sbChannel) return;
+    _sbChannel = _sbClient.channel('suppliers-rt')
+      .on('postgres_changes', {event:'*', schema:'public', table:'suppliers'}, payload => {
+        if(payload.eventType === 'DELETE'){ delete ST.suppliers[payload.old.id]; }
+        else{ const s = this.fromRow(payload.new); ST.suppliers[s.id] = s; }
+        Store.save('fg_sup', ST.suppliers);
+        if(ST.page === 'suppliers') App.renderList();
+        if(ST.page === 'dashboard') App.renderDB();
       }).subscribe();
   },
-  toRow(s){return{id:s.id,name:s.name,numero:s.numero||'',specialty:s.specialty||'',region:s.region||'',ca_annuel:s.caAnnuel||0,ca_realise:s.caRealise||0,notes:s.notes||'',scores:s.scores||{},comments:s.comments||{},expiries:s.expiries||{},manual_decision:s.manualDecision||null,decision_comment:s.decisionComment||'',owner:s.owner||'',deadline:s.deadline||null,actions:s.actions||'',updated_by:s.updatedBy||'',updated_at:s.updatedAt||new Date().toISOString(),created_at:s.createdAt||new Date().toISOString()};},
-  fromRow(r){return{id:r.id,name:r.name,numero:r.numero||'',specialty:r.specialty||'',region:r.region||'',caAnnuel:r.ca_annuel||0,caRealise:r.ca_realise||0,notes:r.notes||'',scores:r.scores||{},comments:r.comments||{},expiries:r.expiries||{},manualDecision:r.manual_decision||null,decisionComment:r.decision_comment||'',owner:r.owner||'',deadline:r.deadline||'',actions:r.actions||'',updatedBy:r.updated_by||'',updatedAt:r.updated_at||'',createdAt:r.created_at||''};},
+
+  toRow(s){ return {id:s.id, name:s.name, numero:s.numero||'', specialty:s.specialty||'', region:s.region||'', ca_annuel:s.caAnnuel||0, ca_realise:s.caRealise||0, notes:s.notes||'', scores:s.scores||{}, comments:s.comments||{}, expiries:s.expiries||{}, manual_decision:s.manualDecision||null, decision_comment:s.decisionComment||'', owner:s.owner||'', deadline:s.deadline||null, actions:s.actions||'', updated_by:s.updatedBy||'', updated_at:s.updatedAt||new Date().toISOString(), created_at:s.createdAt||new Date().toISOString()}; },
+  fromRow(r){ return {id:r.id, name:r.name, numero:r.numero||'', specialty:r.specialty||'', region:r.region||'', caAnnuel:r.ca_annuel||0, caRealise:r.ca_realise||0, notes:r.notes||'', scores:r.scores||{}, comments:r.comments||{}, expiries:r.expiries||{}, manualDecision:r.manual_decision||null, decisionComment:r.decision_comment||'', owner:r.owner||'', deadline:r.deadline||'', actions:r.actions||'', updatedBy:r.updated_by||'', updatedAt:r.updated_at||'', createdAt:r.created_at||''}; },
+
+  // ── UTILISATEURS ─────────────────────────────────────────
+  async loadUsers(){
+    if(!_sbClient) return;
+    try{
+      const {data, error} = await _sbClient.from('app_users').select('*');
+      if(error) throw error;
+      if(data && data.length){
+        ST.cfg.users = data.map(u => ({id:u.id, login:u.login, password:u.password, nom:u.nom, service:u.service, actif:u.actif}));
+        Store.save('fg_cfg', ST.cfg);
+        if(ST.admOpen) App.renderUsersList();
+      }
+    }catch(e){ console.warn('SB loadUsers:', e.message); }
+  },
+
+  async upsertUser(u){
+    if(!_sbClient) return;
+    try{
+      const {error} = await _sbClient.from('app_users').upsert({id:u.id, login:u.login, password:u.password, nom:u.nom, service:u.service, actif:u.actif});
+      if(error) throw error;
+    }catch(e){ console.warn('SB upsertUser:', e.message); }
+  },
+
+  async removeUser(id){
+    if(!_sbClient) return;
+    try{ const {error} = await _sbClient.from('app_users').delete().eq('id', id); if(error) throw error; }
+    catch(e){ console.warn('SB removeUser:', e.message); }
+  },
+
+  subscribeUsers(){
+    if(!_sbClient || _sbUsersChannel) return;
+    _sbUsersChannel = _sbClient.channel('users-rt')
+      .on('postgres_changes', {event:'*', schema:'public', table:'app_users'}, payload => {
+        if(payload.eventType === 'DELETE'){
+          ST.cfg.users = ST.cfg.users.filter(u => u.id !== payload.old.id);
+        } else {
+          const r = payload.new;
+          const u = {id:r.id, login:r.login, password:r.password, nom:r.nom, service:r.service, actif:r.actif};
+          const idx = ST.cfg.users.findIndex(x => x.id === u.id);
+          if(idx >= 0) ST.cfg.users[idx] = u; else ST.cfg.users.push(u);
+        }
+        Store.save('fg_cfg', ST.cfg);
+        if(ST.admOpen) App.renderUsersList();
+      }).subscribe();
+  }
 };
 
 // ── APP ──────────────────────────────────────────────────
@@ -561,6 +619,7 @@ const App = {
 
   logout(){
     if(_sbChannel){_sbChannel.unsubscribe();_sbChannel=null;}
+    if(_sbUsersChannel){_sbUsersChannel.unsubscribe();_sbUsersChannel=null;}
     ST.user=null;ST.service=null;ST.userId=null;
     Store.save('fg_ses',null);
     document.getElementById('l-login').value='';
@@ -1037,8 +1096,10 @@ const App = {
     if(!nom||!login||!pw){this.toast('Tous les champs sont obligatoires.','red');return;}
     if(ST.cfg.users.find(u=>u.login===login)){this.toast('Cet identifiant existe déjà.','red');return;}
     if(!ST.cfg.users)ST.cfg.users=[];
-    ST.cfg.users.push({id:'u'+Date.now(),login,password:pw,nom,service:svc,actif:true});
+    const newU={id:'u'+Date.now(),login,password:pw,nom,service:svc,actif:true};
+    ST.cfg.users.push(newU);
     Store.save('fg_cfg',ST.cfg);
+    SB.upsertUser(newU);
     ['nu-nom','nu-login','nu-pw'].forEach(id=>document.getElementById(id).value='');
     this.renderUsersList();this.toast('Utilisateur ajouté ✓','green');
   },
@@ -1046,7 +1107,7 @@ const App = {
   toggleUser(id,actif){
     const u=ST.cfg.users?.find(x=>x.id===id);if(!u)return;
     if(id==='u0'&&!actif){this.toast("Impossible de désactiver le compte admin.","red");this.renderUsersList();return;}
-    u.actif=actif;Store.save('fg_cfg',ST.cfg);this.renderUsersList();
+    u.actif=actif;Store.save('fg_cfg',ST.cfg);SB.upsertUser(u);this.renderUsersList();
     this.toast(actif?'Compte activé ✓':'Compte désactivé.', actif?'green':'red');
   },
 
@@ -1054,13 +1115,13 @@ const App = {
     const u=ST.cfg.users?.find(x=>x.id===id);if(!u)return;
     const np=prompt('Nouveau mot de passe pour '+u.nom+' :');
     if(!np||np.length<4){this.toast('Mot de passe trop court (4 car. min).','red');return;}
-    u.password=np;Store.save('fg_cfg',ST.cfg);this.toast('Mot de passe réinitialisé ✓','green');
+    u.password=np;Store.save('fg_cfg',ST.cfg);SB.upsertUser(u);this.toast('Mot de passe réinitialisé ✓','green');
   },
 
   delUser(id){
     if(!confirm('Supprimer cet utilisateur ?'))return;
     ST.cfg.users=ST.cfg.users.filter(u=>u.id!==id);
-    Store.save('fg_cfg',ST.cfg);this.renderUsersList();this.toast('Utilisateur supprimé.','red');
+    Store.save('fg_cfg',ST.cfg);SB.removeUser(id);this.renderUsersList();this.toast('Utilisateur supprimé.','red');
   },
 
   // Weights / criteria / regions
