@@ -606,10 +606,19 @@ const App = {
   },
 
   // ── AUTH ───────────────────────────────────────────────
-  login(){
-    const login=document.getElementById('l-login').value.trim();
+  async login(){
+    const loginVal=document.getElementById('l-login').value.trim();
     const pw=document.getElementById('l-pw').value;
-    const u=ST.cfg.users?.find(x=>x.login===login&&x.password===pw&&x.actif);
+    const btn=document.querySelector('[onclick="App.login()"]');
+    if(btn){btn.disabled=true;btn.textContent='Connexion…';}
+    // Tentative 1 : utilisateurs en mémoire (cache local)
+    let u=ST.cfg.users?.find(x=>x.login===loginVal&&x.password===pw&&x.actif);
+    // Tentative 2 : si non trouvé, recharger depuis Supabase et réessayer
+    if(!u && SB.ok()){
+      await SB.loadUsers();
+      u=ST.cfg.users?.find(x=>x.login===loginVal&&x.password===pw&&x.actif);
+    }
+    if(btn){btn.disabled=false;btn.textContent='Se connecter →';}
     if(!u){document.getElementById('l-err').classList.remove('hidden');return;}
     document.getElementById('l-err').classList.add('hidden');
     ST.user=u.nom;ST.service=u.service;ST.userId=u.id;
